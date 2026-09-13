@@ -14,18 +14,30 @@ js/
                       STARSHIP ARC, ARC Browser, foro, seguridad ~250 KB
 api/
   records.php         API de leaderboard (PHP — FUENTE DE VERDAD en producción)
-  records.js          Espejo Node.js (misma lógica exacta, solo para hosts Node)
+  records.node.js     Espejo Node.js (misma lógica exacta, solo para hosts Node).
+                      El sufijo ".node" evita el conflicto de despliegue que
+                      provocaban "records.js" y "records.php" en el mismo directorio.
   forum.php           Foro inmutable (bcrypt + sesiones, sin editar/borrar)
 data/                 JSON vivos: leaderboard, forum, ratelimit (se autogeneran)
 assets/               Logos ARC/Piper, nave, items (tu astronauta: assets/astronaut.png)
 assets/enemies/       Sprites SVG de enemigos (cargados al atlas del juego)
 AUDIT.md              Informe de auditoría técnica del proyecto
-console_old2.html     Respaldo íntegro del monolito original (referencia)
 ```
 
 ## Requisitos de despliegue
 - Cualquier host con **PHP 7.4+** (sin dependencias). `data/` debe tener permiso de escritura.
 - Abrido localmente (`file://`): todo funciona salvo leaderboard/foro en red (fallback localStorage).
+- Host **Node**: renombra/copia `api/records.node.js` a la ruta que sirva tu servidor. En este repo lleva el sufijo `.node` porque varias plataformas abortan el despliegue cuando `api/` contiene dos archivos que solo difieren en la extensión (`records.php` / `records.js`).
+- Móvil: el viewport ya no usa `user-scalable=no` ni `maximum-scale` (eso disparaba avisos de accesibilidad y de "entorno de desarrollo"); el pinch-zoom queda libre y el canvas se reajusta solo.
+- La detección de DevTools del "security shield" es **solo desktop** y está documentada como lore, no como seguridad real.
+
+## Controles en móvil (Ships.exe)
+Sí, el juego es jugable en celular con controles táctiles propios (no depende del teclado):
+- **Joystick virtual** (abajo-izquierda): movimiento analógico. Escrito en `NV.touch.dx/dy` y leído por el mismo código de input que las flechas/WASD.
+- **4 botones** (abajo-derecha): `🌀` Warp Dash · `🎵` Misiles · `⏳` Carga de railgun · `☣️` Bomba.
+- **Disparo automático**: en táctil la flauta-láser dispara sola (no hay botón de fuego).
+- Aparecen al empezar la partida (`nextRound()` añade `.show` a `#touchJoy`/`#touchBtns`) y se ocultan en menús, pausa, briefing y leaderboard.
+- El juego detecta móvil por user-agent, `ontouchstart`, tamaño de ventana y orientación para ajustar dificultad, número de enemigos en pantalla y velocidad de oleada.
 
 ## APIs
 ### `api/records.php` — Leaderboard Endurecido (v2)
@@ -41,7 +53,7 @@ console_old2.html     Respaldo íntegro del monolito original (referencia)
 - `post` (1-400 chars, 1 post/15 s por usuario) · `?action=posts` → últimos 50.
 - **Sin endpoints de editar/borrar**: lo escrito queda escrito para siempre.
 
-## STARSHIP ARC: VIRUS HUNTERS (naves.exe)
+## STARSHIP ARC: VIRUS HUNTERS (Ships.exe)
 - Intro cinematográfica ARC STUDIOS / PIPER STUDIO con jingles WebAudio.
 - Conteo **3-2-1 con arena limpia** entre sectores; sectores infinitos con afijos (banner de advertencia incluido).
 - Habilidades: `SHIFT` Warp Dash · `X` Railgun · `C` Orbital Strike · `B` Bomb · `P` pausa.
@@ -53,7 +65,7 @@ console_old2.html     Respaldo íntegro del monolito original (referencia)
 - Boot con BIOS POST realista (conteo de memoria animado) + login jingle.
 - Ventanas arrastrables/redimensionables; maximizado con contenido adaptativo; taskbar muestra solo apps abiertas.
 - Reloj con tooltip de fecha completa; notificaciones ambientales simuladas de la red.
-- Motor de "virus" en popups: activo siempre excepto dentro del ARC Browser y naves.exe; el antivirus purga todo y da 60 s de paz.
+- Motor de "virus" en popups: activo siempre excepto dentro del ARC Browser y Ships.exe; el antivirus purga todo y da 60 s de paz.
 - Minijuegos: Minesweeper, Spider Solitaire, Space Pinball; ARC Browser con tabs, marcadores, synth, tienda, foro.
 
 ## Buenas prácticas aplicadas

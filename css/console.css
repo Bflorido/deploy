@@ -321,7 +321,7 @@
 
   #pbCanvas { background:#05010f; border:1px solid #404040; display:block; margin:0 auto; }
 
-  /* NAVES v4.2 */
+  /* SHIPS.EXE v4.2 */
   #navesGame { position:fixed; inset:0; z-index:4600; display:none; background:#000; touch-action:none; }
   #navesGame.show { display:block; }
   #nvCanvas { position:absolute; inset:0; width:100%; height:100%; display:block; image-rendering:auto; will-change:transform; }

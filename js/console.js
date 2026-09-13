@@ -172,7 +172,7 @@ function pentatonicNoteSfx(idx){
     return '<i style="left:'+x+'%; top:'+y+'%; opacity:'+((i+1)/8)+'"></i>';}).join('');
   document.getElementById('spin1').innerHTML=spinHTML; document.getElementById('spin2').innerHTML=spinHTML;
   const biosLines=['ARCSYSTEMS BIOS v6.6.6 (C) 2094 Federal ARC Network','CPU : MEME-PROC 666 MHz',
-    'Detecting drives... C:\\ ARC   D:\\ MEMES   E:\\ NAVES   F:\\ BROWSER','Warning: toxic memes detected in sector 7G',
+    'Detecting drives... C:\\ ARC   D:\\ MEMES   E:\\ SHIPS   F:\\ BROWSER','Warning: toxic memes detected in sector 7G',
     'Starting ARC SYSTEM Professional...',''];
   const biosEl=document.getElementById('bios'), boot=document.getElementById('boot');
   let bi=0,done=false,timers=[];
@@ -460,7 +460,7 @@ let popupGraceUntil = 0; // post-antivirus "clean system" grace period
 function popupsSuppressed(){
   if(Date.now() < popupGraceUntil) return true; // PC is clean... for now
   const b=document.getElementById('win-browser');
-  const n=document.getElementById('shipsGame');
+  const n=document.getElementById('navesGame');
   return (b && b.style.display!=='none') || (n && n.classList.contains('show'));
 }
 function spawnPopup(){ if(scanning)return; if(popupsSuppressed())return;
@@ -490,21 +490,22 @@ const AMBIENT_MSGS=['🌐 ARC Network: 1,000,000+ nodes online','📦 New block 
   '🔒 Encrypted channel to piper.meme renewed','🧠 ARC AI: model refresh complete','💾 Auto-save: meme cache defragmented'];
 setInterval(function(){
   const adOn = document.getElementById('adOverlay').classList.contains('show');
-  const n = document.getElementById('shipsGame');
+  const n = document.getElementById('navesGame');
   if(popupsSuppressed() || adOn) return; // don't compete with browser/game/ad
   if(Math.random()<.5) spawnToast(AMBIENT_MSGS[Math.floor(Math.random()*AMBIENT_MSGS.length)]);
 }, 42000);
 function openMeme(name, url){ try{ sfx(880,.1,'square',.1); }catch(e){} if(url) window.open(url,'_blank'); }
 function soonClick(name){ const t=document.createElement('div'); t.className='popup'; t.style.width='340px'; t.style.zIndex=560;
   t.style.left=(innerWidth/2-170)+'px'; t.style.top=(innerHeight/2-120)+'px';
-  t.innerHTML='<div class="title-bar purple"><span>🚧 '+esc(name)+'</span><div class="tb-btns"><button class="close" onclick="this.closest(\'.popup\').remove()">✕</button></div></div>'+
+  t.innerHTML='<div class="title-bar purple"><span>🚧 '+name+'</span><div class="tb-btns"><button class="close" onclick="this.closest(\'.popup\').remove()">✕</button></div></div>'+
    '<div class="pbody" style="flex-direction:column; align-items:center; text-align:center;"><span class="pemoji">🚧</span>'+
-   '<div><b>COMING SOON TO PIPER.MEME</b><br>"'+esc(name)+'" is in creative quarantine.</div></div>'+
+   '<div><b>COMING SOON TO PIPER.MEME</b><br>"'+name+'" is in creative quarantine.</div></div>'+
    '<div class="pbtns"><a class="btn98 green" href="https://piper.meme" target="_blank" rel="noopener">GO TO PIPER.MEME</a><button class="btn98" onclick="this.closest(\'.popup\').remove()">Wait</button></div>';
   document.getElementById('popLayer').appendChild(t); }
 function spawnToast(msg){ const t=document.createElement('div'); t.className='popup'; t.style.width='320px'; t.style.zIndex=560;
   t.style.left=(innerWidth/2-160)+'px'; t.style.top=(innerHeight/2-80)+'px';
-  t.innerHTML='<div class="title-bar green"><span> System</span><div class="tb-btns"><button class="close" onclick="this.closest(\'.popup\').remove()">✕</button></div></div><div class="pbody" style="font-size:12px;">'+msg+'</div>';
+  // Se escapa el mensaje: los toasts son texto plano y algunos llevan input del usuario.
+  t.innerHTML='<div class="title-bar green"><span> System</span><div class="tb-btns"><button class="close" onclick="this.closest(\'.popup\').remove()">✕</button></div></div><div class="pbody" style="font-size:12px;">'+esc(msg)+'</div>';
   document.getElementById('popLayer').appendChild(t); setTimeout(function(){t.remove();},4000); }
 const showToast = spawnToast;
 
@@ -935,7 +936,7 @@ window.addEventListener('keyup', function(e){
 pbLoop();
 
 /* =====================================================
-   NAVES.EXE v4.2 — OPTIMIZADO + ARC BROWSER
+   SHIPS.EXE v4.2 — OPTIMIZADO + ARC BROWSER
 ===================================================== */
 const nvCv=document.getElementById('nvCanvas'), nvCtx=nvCv.getContext('2d', { alpha: false, desynchronized: true });
 const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints>0;
@@ -1548,8 +1549,8 @@ function beginNvCrt(){
 function uiTickSfx(){ sfx(1400,.05,'square',.07); }
 function uiConfirmSfx(){ sfx(660,.09,'square',.12); setTimeout(function(){sfx(990,.12,'square',.1);},70); }
 
-function openShips(){
-  document.getElementById('shipsGame').classList.add('show');
+function openNaves(){
+  document.getElementById('navesGame').classList.add('show');
   clearAllPopups(); // silence virus engine while playing
   NV.on=true; NV.state='intro'; NV.crtT=0; nvResize(); nvShow(null);
   NV.score=0; NV.combo=0; NV.round=0;
@@ -1574,7 +1575,7 @@ function updatePilotPlate(){
   const name=localStorage.getItem('arc_last_pilot')||'ROOKIE';
   el.textContent = best>0 ? ('PILOT '+name+' — RECORD: '+best.toLocaleString()) : 'NEW PILOT — NO FLIGHT RECORD YET';
 }
-function closeShips(){ NV.on=false; NV.state='off'; document.getElementById('shipsGame').classList.remove('show');
+function closeNaves(){ NV.on=false; NV.state='off'; document.getElementById('navesGame').classList.remove('show');
   document.getElementById('touchJoy').classList.remove('show');
   document.getElementById('touchBtns').classList.remove('show'); }
 function nvToMenu(){
@@ -2475,7 +2476,7 @@ function playSynthDemo(melodyType){
       { f: 440, d: 150 }, { f: 523.25, d: 150 }, { f: 659.25, d: 150 }, { f: 783.99, d: 250 },
       { f: 659.25, d: 150 }, { f: 523.25, d: 150 }, { f: 440, d: 350 }
     ],
-    naves: [
+    ships: [
       { f: 261.63, d: 120 }, { f: 329.63, d: 120 }, { f: 392, d: 120 }, { f: 523.25, d: 180 },
       { f: 466.16, d: 140 }, { f: 392, d: 140 }, { f: 349.23, d: 140 }, { f: 261.63, d: 300 }
     ],
@@ -2612,7 +2613,7 @@ function renderSwapPage(){
       '<div class="synth-presets">' +
         '<span style="font-size:11px; color:#94a3b8; font-weight:700; text-transform:uppercase;">Melody Demos:</span>' +
         '<button class="synth-preset-btn" onclick="playSynthDemo(\'cyber\')">🚀 Cyber Anthem</button>' +
-        '<button class="synth-preset-btn" onclick="playSynthDemo(\'naves\')">👾 Naves Theme</button>' +
+        '<button class="synth-preset-btn" onclick="playSynthDemo(\'ships\')">👾 Ships Theme</button>' +
         '<button class="synth-preset-btn" onclick="playSynthDemo(\'gameboy\')">🎮 GameBoy Nostalgia</button>' +
       '</div>' +
     '</div>' +
@@ -2651,7 +2652,7 @@ window.addEventListener('keydown', function(e){
 });
 
 const memeProducts = [
-  { id:'pingu', name:'Pingu', icon:'🐧', x:'https://x.com/PinguMemeX', price:50000000, desc:'The most dangerous penguin on digital ice. Noot noot.', perk:'❄️ Ice Laser in ships.exe' },
+  { id:'pingu', name:'Pingu', icon:'🐧', x:'https://x.com/PinguMemeX', price:50000000, desc:'The most dangerous penguin on digital ice. Noot noot.', perk:'❄️ Ice Laser in Ships.exe' },
   { id:'pug', name:'Pug Galaxys', icon:'🐶', x:'https://x.com/Puggalaxys1', price:100000000, desc:'A space pug guarding meme galaxies across the metaverse.', perk:'❤️ +1 Extra Life' },
   { id:'shitcoin', name:'Shitcoin Lovers', icon:'💩', x:'https://x.com/ShitCoinsLovers', price:200000000, desc:'True love for worthless coins. Pure diamond hands.', perk:'🪙 2x ARC Drop Rate' },
   { id:'tick', name:'Tick Cult', icon:'✅', img:'assets/TICKCULT.jpg', x:'https://x.com/TICKCULT', price:300000000, desc:'The cult of the tick confirming spiritual infection. Tick tick tick.', perk:'🛡️ Auto-Shield on ship' },
@@ -2694,7 +2695,7 @@ function buyMeme(id){
     return;
   }
   if(userWallet.ARC < item.price){
-    spawnToast('❌ You need ' + item.price.toLocaleString() + ' ARC! Win rounds in ships.exe.');
+    spawnToast('❌ You need ' + item.price.toLocaleString() + ' ARC! Win rounds in Ships.exe.');
     return;
   }
   userWallet.ARC -= item.price;
@@ -2764,7 +2765,7 @@ const searchResults = {
   'wallet': [{title:'My ARC Wallet',url:'arc://wallet',desc:'Check your ARC, USDC, and PIPER token balances.'}],
   'network': [{title:'ARC Network Status',url:'arc://network',desc:'Live network nodes, blocks, and latency stats.'}],
   'news': [{title:'ARC News Feed',url:'arc://news',desc:'Latest updates from the ARC Network and meme ecosystem.'}],
-  'games': [{title:'ARC Games Launcher',url:'arc://games',desc:'Play ships.exe, Minesweeper, Spider Solitaire, and Space Pinball.'}],
+  'games': [{title:'ARC Games Launcher',url:'arc://games',desc:'Play Ships.exe, Minesweeper, Spider Solitaire, and Space Pinball.'}],
   'forum': [{title:'ARC Forum — Public Channel',url:'arc://forum',desc:'Talk with other pilots. Immutable records: written is written forever.'}]
 };
 
@@ -2775,7 +2776,7 @@ function renderTabs(){
   browserTabs.forEach(function(tab){
     const el = document.createElement('div');
     el.className = 'browser-tab' + (tab.id === activeTabId ? ' active' : '');
-    el.innerHTML = '<span class="tab-fav">'+tab.favicon+'</span><span class="tab-title">'+tab.title+'</span><span class="tab-close" data-id="'+tab.id+'">✕</span>';
+    el.innerHTML = '<span class="tab-fav">'+esc(tab.favicon)+'</span><span class="tab-title">'+esc(tab.title)+'</span><span class="tab-close" data-id="'+esc(tab.id)+'">✕</span>';
     el.addEventListener('click', function(e){
       if(e.target.classList.contains('tab-close')){
         e.stopPropagation();
@@ -2987,7 +2988,7 @@ function renderHomePage(){
   const weeklyLead = weeklyTop ? weeklyTop.name + ' (' + weeklyTop.score.toLocaleString() + ')' : 'No entries yet';
 
   const arcNews = [
-    { ic:'🚀', txt:'ships.exe v4.2 — New boss: THE INDUSTRIAL FACTORY', time:'2h ago' },
+    { ic:'🚀', txt:'Ships.exe v4.2 — New boss: THE INDUSTRIAL FACTORY', time:'2h ago' },
     { ic:'🎹', txt:'ARC Synth Lab: Play 8-bit chiptunes & cyber melodies', time:'3h ago' },
     { ic:'🏆', txt:'Weekly leaderboard resets every 7 days — fight for #1!', time:'12h ago' },
     { ic:'🦠', txt:'VirusARC neutralized 666 new threats this cycle', time:'1d ago' },
@@ -2995,7 +2996,7 @@ function renderHomePage(){
   ];
 
   const top3HTML = top3.length === 0
-    ? '<div style="color:#64748b;font-size:12px;font-family:Inter,sans-serif;">No records yet — play ships.exe!</div>'
+    ? '<div style="color:#64748b;font-size:12px;font-family:Inter,sans-serif;">No records yet — play Ships.exe!</div>'
     : top3.map(function(r,i){ return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #3d3d4d;">'+
         '<span style="font-size:14px;">'+(i===0?'🥇':i===1?'🥈':'🥉')+'</span>'+
         '<span style="color:#e2e8f0;font-family:Inter,sans-serif;font-size:12px;font-weight:600;">'+r.name+'</span>'+
@@ -3067,11 +3068,14 @@ function renderHomePage(){
 function renderSearchResults(query, results){
   const content = document.getElementById('browserContent');
   if(!content) return;
-  let html = '<div class="results-page"><div class="results-header">Results for "'+query+'" — '+results.length+' found</div>';
+  // Seguridad: `query` viene del input del usuario (barra de direcciones / palette).
+  // Sin escapar, un texto como <img src=x onerror=...> se ejecutaría en la página.
+  const q = esc(query);
+  let html = '<div class="results-page"><div class="results-header">Results for "'+q+'" — '+results.length+' found</div>';
   results.forEach(function(r){
-    html += '<div class="result-item"><div class="result-url">'+r.url+'</div><div class="result-title" data-url="'+r.url+'">'+r.title+'</div><div class="result-desc">'+r.desc+'</div></div>';
+    html += '<div class="result-item"><div class="result-url">'+esc(r.url)+'</div><div class="result-title" data-url="'+esc(r.url)+'">'+esc(r.title)+'</div><div class="result-desc">'+esc(r.desc)+'</div></div>';
   });
-  html += '<div class="result-item" style="margin-top:14px;background:rgba(0,212,255,0.05);border:1px solid #3d3d4d;border-radius:8px;padding:10px;"><div class="result-url">arc://network</div><div class="result-title" data-url="arc://network">🌐 More about &quot;'+query+'&quot; on the ARC Network</div><div class="result-desc">ARC Browser keeps everything inside the simulated ARC Network.</div></div>';
+  html += '<div class="result-item" style="margin-top:14px;background:rgba(0,212,255,0.05);border:1px solid #3d3d4d;border-radius:8px;padding:10px;"><div class="result-url">arc://network</div><div class="result-title" data-url="arc://network">🌐 More about &quot;'+q+'&quot; on the ARC Network</div><div class="result-desc">ARC Browser keeps everything inside the simulated ARC Network.</div></div>';
   html += '</div>';
   content.innerHTML = html;
   content.querySelectorAll('.result-title').forEach(function(el){
@@ -3096,7 +3100,7 @@ function renderLeaderboardPage(){
   html += '<p style="color:#94a3b8;font-family:Inter,sans-serif;font-size:13px;margin-bottom:18px;">Permanent Hall of Fame records. Each pilot occupies at most one spot.</p>';
   html += '<h2 style="color:#fbbf24;font-size:18px;font-family:VT323,monospace;letter-spacing:2px;margin-bottom:8px;">🏅 ALL-TIME RECORDS</h2>';
   if(alltime.length === 0){
-    html += '<p style="color:#64748b;">No records yet. Play ships.exe and make history!</p>';
+    html += '<p style="color:#64748b;">No records yet. Play Ships.exe and make history!</p>';
   } else {
     html += '<table style="width:100%;border-collapse:collapse;font-family:VT323,monospace;font-size:17px;">';
     html += '<tr><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">#</th><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">Pilot</th><th style="color:#00d4ff;text-align:right;padding:6px 8px;border-bottom:2px solid #00d4ff;">Score</th><th style="color:#00d4ff;text-align:center;padding:6px 8px;border-bottom:2px solid #00d4ff;">Sector</th></tr>';
@@ -3295,7 +3299,7 @@ function forumPost(){
 
 function renderNewsPage(){
   const news = [
-    { ic:'🚀', title:'ships.exe v4.2 Update — New Boss Added', body:'THE INDUSTRIAL FACTORY is now live in Sector 10+. This dual-belt boss launches drone swarms and homing missiles. Good luck, pilot.', time:'2h ago' },
+    { ic:'🚀', title:'Ships.exe v4.2 Update — New Boss Added', body:'THE INDUSTRIAL FACTORY is now live in Sector 10+. This dual-belt boss launches drone swarms and homing missiles. Good luck, pilot.', time:'2h ago' },
     { ic:'🎹', title:'ARC Synth Lab v2.0 Released in Browser', body:'Experience a real-time WebAudio chiptune synthesizer and oscilloscope right inside ARC Browser. Play keys with your keyboard or touch screen!', time:'3h ago' },
     { ic:'🏆', title:'Weekly Leaderboard: New #1 Pilot Crowned', body:'A new champion has claimed the #1 weekly spot. Will you beat them? Each week resets — your chance to shine starts now.', time:'12h ago' },
     { ic:'🛍️', title:'Meme Store: TICK Token Unlocks Invincibility', body:'TICK holders now get a free shield on game start. Stock up before supplies run out — 300M ARC per unit.', time:'1d ago' },
@@ -3318,7 +3322,7 @@ function renderNewsPage(){
 
 function renderGamesPage(){
   const games = [
-    { ic:'🚀', name:'ships.exe', desc:'Space shooter with infinite sectors, bosses, and crypto power-ups.', action:'openShips()' },
+    { ic:'🚀', name:'Ships.exe', desc:'Space shooter with infinite sectors, bosses, and crypto power-ups.', action:'openNaves()' },
     { ic:'💣', name:'Minesweeper', desc:'Classic 9x9 Minesweeper. Sweep the field before the mines blow.', action:'openWindow(\'win-mines\'); msNew();' },
     { ic:'🕷️', name:'Spider Solitaire', desc:'Classic card stacking game. Build suits from K to A.', action:'openWindow(\'win-spider\'); spiderNew();' },
     { ic:'🚀', name:'Space Pinball', desc:'High-score space pinball with ARC-themed obstacles.', action:'openWindow(\'win-pinball\');' }
@@ -3376,7 +3380,7 @@ function toggleSidebar(){
 
 // ARC COMMAND PALETTE
 const arcCommands = [
-  { id:'naves', title:'Launch ships.exe', ic:'🚀', cat:'App', run: function(){ openNaves(); } },
+  { id:'naves', title:'Launch Ships.exe', ic:'🚀', cat:'App', run: function(){ openNaves(); } },
   { id:'synth', title:'ARC Synth Lab (Chiptune Synth)', ic:'🎹', cat:'Browser', run: function(){ openWindow('win-browser'); switchSpace('synth'); } },
   { id:'shop', title:'Piper.meme Official Store', ic:'🛍️', cat:'Browser', run: function(){ openWindow('win-browser'); switchSpace('shop'); } },
   { id:'scan', title:'VirusARC Quick Scan', ic:'🛡️', cat:'Antivirus', run: function(){ openWindow('win-main'); startScan(); } },
@@ -3517,7 +3521,7 @@ function applyPowerUp(t){
   }
 }
 
-/* ============ NAVES GAME LOOP ============ */
+/* ============ SHIPS GAME LOOP ============ */
 let lastFrameTime = 0;
 function nvLoop(timestamp){
   requestAnimationFrame(nvLoop);
@@ -5113,13 +5117,32 @@ function initSecurityShield(){
     }
   }, 400);
 
-  // 4. DevTools Detection and Security Lockout
+  // 4. DevTools Detection and Security Lockout (SOLO DESKTOP)
+  // Antes se comparaba outer* - inner* contra un umbral fijo de 160 px para
+  // cualquier plataforma. En móviles y webviews (iOS Safari, Chrome Android,
+  // navegadores in-app) esa diferencia supera siempre el umbral porque la barra
+  // de URL y los controles del sistema no cuentan como viewport: la web creía
+  // que había DevTools abiertas y mostraba el banner "Developer inspection
+  // environment detected". Ahora la comprobación es desktop-only, ignora
+  // dispositivos táctiles y exige una proporción anómala, no un valor absoluto.
   let devtoolsDetected = false;
-  const threshold = 160;
+  function devtoolsCheckApplies(){
+    if(isTouch || navigator.maxTouchPoints > 0) return false;
+    if(window.innerWidth < 900) return false;
+    if(!window.matchMedia) return true;
+    try{
+      if(window.matchMedia('(pointer: coarse)').matches) return false;
+      if(window.matchMedia('(hover: none)').matches) return false;
+    }catch(e){}
+    return true;
+  }
   setInterval(function(){
-    const widthDiff = window.outerWidth - window.innerWidth > threshold;
-    const heightDiff = window.outerHeight - window.innerHeight > threshold;
-    if((widthDiff || heightDiff) && !devtoolsDetected){
+    if(devtoolsDetected || !devtoolsCheckApplies()) return;
+    const wDiff = window.outerWidth - window.innerWidth;
+    const hDiff = window.outerHeight - window.innerHeight;
+    const misconfigured = (wDiff > 160 && wDiff / window.innerWidth > 0.25) ||
+                          (hDiff > 260 && hDiff / window.innerHeight > 0.30);
+    if(misconfigured){
       devtoolsDetected = true;
       const lockout = document.createElement('div');
       lockout.id = 'secLockout';

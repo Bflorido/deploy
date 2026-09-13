@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- Viewport sin user-scalable=no ni maximum-scale.
+     Motivo: es una barrera de accesibilidad (WCAG 1.4.4) y hace fallar las
+     auditorías de Lighthouse/axe ("Zooming and scaling must not be disabled").
+     NO era la causa del banner de "entorno de desarrollo" en móvil: eso venía de
+     la detección de DevTools por dimensiones en initSecurityShield (js/console.js),
+     ya corregida. El canvas se reajusta solo en nvResize/resize. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ARCSYSTEMS XP — Professional</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/vt323@5.0.0/index.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.0/index.min.css">
@@ -34,7 +40,7 @@
   <div class="dicons">
     <div class="dicon" ondblclick="spawnToast(' My Computer: 500M tokens stored in C:\\ARC')"><span class="ico">💻</span><span class="lbl">My Computer</span></div>
     <div class="dicon" ondblclick="openWindow('win-main')"><span class="ico">🛡️</span><span class="lbl">VirusARC.exe</span></div>
-    <div class="dicon" ondblclick="openShips()"><span class="ico">🚀</span><span class="lbl">ships.exe</span></div>
+    <div class="dicon" ondblclick="openNaves()"><span class="ico">🚀</span><span class="lbl">Ships.exe</span></div>
     <div class="dicon" ondblclick="openWindow('win-browser')"><span class="ico">🌐</span><span class="lbl">ARC Browser</span></div>
     <div class="dicon" ondblclick="openWindow('win-memes')"><span class="ico">📁</span><span class="lbl">Memes</span></div>
     <div class="dicon" ondblclick="openWindow('win-games')"><span class="ico">🎮</span><span class="lbl">Games</span></div>
@@ -135,7 +141,7 @@ C:\ARC> Desktop icons repaired ✓
                 <div class="news-time">5 min ago</div>
               </div>
               <div class="news-item">
-                <div class="news-title"> ships.exe v4.2 available</div>
+                <div class="news-title">🚀 Ships.exe v4.2 available</div>
                 <div class="news-time">2h ago</div>
               </div>
               <div class="news-item">
@@ -199,7 +205,7 @@ C:\ARC> Desktop icons repaired ✓
         <div class="meme-tile" style="padding:12px 6px;" onclick="openWindow('win-spider'); spiderNew();"><div class="mt-icon" style="font-size:36px;">🕷️</div><div class="mt-name" style="font-size:11px;">Spider Solitaire</div><span class="mt-badge play">PLAY</span></div>
         <div class="meme-tile" style="padding:12px 6px;" onclick="openWindow('win-pinball')"><div class="mt-icon" style="font-size:36px;">🚀</div><div class="mt-name" style="font-size:11px;">Space Pinball</div><span class="mt-badge play">PLAY</span></div>
       </div>
-      <div style="font-size:11px; margin-top:10px; color:#444; text-align:center;">* <b>ships.exe v4.2</b>: Optimized + ARC Browser 🌐</div>
+      <div style="font-size:11px; margin-top:10px; color:#444; text-align:center;">* <b>Ships.exe v4.2</b>: Optimized + ARC Browser 🌐</div>
     </div>
   </div>
 
@@ -262,7 +268,7 @@ C:\ARC> Desktop icons repaired ✓
       <div class="tb-btns"><button onclick="minimize('win-note')">_</button><button onclick="maxWin('win-note')">□</button><button class="close" onclick="closeWindow('win-note')">✕</button></div></div>
     <div class="np-menu"><span>File</span><span>Edit</span><span>Format</span><span>View</span></div>
     <div class="window-body" style="padding:0;">
-      <div class="notepad">NAVES.EXE v4.2 + ARC BROWSER v2.0 🌐
+      <div class="notepad">SHIPS.EXE v4.2 + ARC BROWSER v2.0 🌐
 
 NEW: Edge-style ARC Browser
 - Real tabs with favicons
@@ -288,24 +294,6 @@ Signed: The ARC AI.</div>
     <div class="status-bar"><span class="cell">Ln 1, Col 1</span><span class="cell">UTF-8</span></div>
   </div>
 
-  <div class="window" id="win-config" style="left:180px; top:120px; width:460px;">
-    <div class="title-bar purple"><span>🎛️ Display Properties — Personalize</span>
-      <div class="tb-btns"><button onclick="minimize('win-config')">_</button><button onclick="maxWin('win-config')">□</button><button class="close" onclick="closeWindow('win-config')">✕</button></div></div>
-    <div class="window-body">
-      <div class="cfg-section">
-        <div class="cfg-title">🖼️ Desktop Background (Wallpaper)</div>
-        <div class="cfg-grid" id="wpGrid"></div>
-      </div>
-      <div class="cfg-section">
-        <div class="cfg-title">🎨 Windows XP Color Scheme / Theme</div>
-        <div class="cfg-grid" id="thGrid"></div>
-      </div>
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
-        <button class="btn98" onclick="closeWindow('win-config')">OK</button>
-        <button class="btn98" onclick="closeWindow('win-config')">Cancel</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <div class="ctx-menu" id="ctxMenu">
@@ -372,7 +360,7 @@ Signed: The ARC AI.</div>
     <div class="sm-left">
       <div class="sm-item" onclick="openWindow('win-main'); toggleStart();"><span class="ic">🛡️</span> VirusARC.exe</div>
       <div class="sm-item" onclick="openWindow('win-browser'); toggleStart();"><span class="ic">🌐</span> ARC Browser</div>
-      <div class="sm-item" onclick="toggleStart(); openNaves();"><span class="ic">🚀</span> ships.exe</div>
+      <div class="sm-item" onclick="toggleStart(); openNaves();"><span class="ic">🚀</span> Ships.exe</div>
       <div class="sm-item" onclick="openWindow('win-memes'); toggleStart();"><span class="ic">📁</span> Memes</div>
       <div class="sm-item" onclick="openWindow('win-games'); toggleStart();"><span class="ic">🎮</span> Games</div>
       <div class="sm-item" onclick="openWindow('win-note'); toggleStart();"><span class="ic">📄</span> README.txt</div>
@@ -393,8 +381,9 @@ Signed: The ARC AI.</div>
   </div>
 </div>
 
-<!-- NAVES v4.2 -->
-<div id="shipsGame">
+<!-- SHIPS.EXE v4.2 (STARSHIP ARC: VIRUS HUNTERS) — los identificadores internos
+     (openNaves, #navesGame, .nv-*) se conservan a propósito para no tocar el motor. -->
+<div id="navesGame">
   <canvas id="nvCanvas"></canvas>
   <div id="nvHUD">
     <div class="hud-top">
@@ -552,7 +541,7 @@ Signed: The ARC AI.</div>
 <!-- ARC COMMAND PALETTE MODAL -->
 <div class="arc-cmd-modal" id="arcCmdModal" onclick="if(event.target===this)toggleArcCmd(false)">
   <div class="arc-cmd-box">
-    <input type="text" class="arc-cmd-input" id="arcCmdInput" placeholder="Type a command or search... (e.g. swap, meme, scan, naves)" oninput="filterArcCmd(this.value)" autocomplete="off" spellcheck="false">
+    <input type="text" class="arc-cmd-input" id="arcCmdInput" placeholder="Type a command or search... (e.g. swap, meme, scan, ships)" oninput="filterArcCmd(this.value)" autocomplete="off" spellcheck="false">
     <div class="arc-cmd-list" id="arcCmdList"></div>
   </div>
 </div>
