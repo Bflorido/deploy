@@ -1,35 +1,34 @@
-﻿
-/* ============ TAP TÃCTIL â†’ ACCIÃ“N (ejecuciÃ³n directa) ============
-   HISTORIA DEL BUG (tres intentos anteriores fallidos en mÃ³vil):
-   1) Los botones usan onclick/ondblclick y en mÃ³vil el navegador NO siempre
-      emite el 'click' tras un tap (lo descarta si el gesto es ambiguo), asÃ­ que
+/* ============ TAP TÁCTIL → ACCIÓN (ejecución directa) ============
+   HISTORIA DEL BUG (tres intentos anteriores fallidos en móvil):
+   1) Los botones usan onclick/ondblclick y en móvil el navegador NO siempre
+      emite el 'click' tras un tap (lo descarta si el gesto es ambiguo), así que
       no pasaba nada.
-   2) Se intentÃ³ sintetizar un click. En Android el navegador a veces marca
-      touchend con cancelable=false, asÃ­ que la guarda lo descartaba.
-   3) Peor: los iconos del escritorio usan ondblclick, y un click sintÃ©tico NUNCA
-      produce un dblclick, asÃ­ que seguÃ­an sin abrir.
+   2) Se intentó sintetizar un click. En Android el navegador a veces marca
+      touchend con cancelable=false, así que la guarda lo descartaba.
+   3) Peor: los iconos del escritorio usan ondblclick, y un click sintético NUNCA
+      produce un dblclick, así que seguían sin abrir.
 
-   ESTRATEGIA ACTUAL â€” no depender de la entrega de eventos:
+   ESTRATEGIA ACTUAL — no depender de la entrega de eventos:
    En vez de fabricar un click y confiar en que el navegador lo procese, se
    interceptan los REGISTROS de manejadores y se invocan DIRECTAMENTE al detectar
    el toque. Se cubren las tres formas en que la interfaz registra acciones:
 
      a) addEventListener('click' | 'dblclick', fn)     -> se intercepta y se guarda
      b) elemento.onclick / ondblclick = fn             -> se intercepta el setter
-     c) atributos inline onclick="â€¦" / ondblclick="â€¦"  -> se leen con getAttribute
+     c) atributos inline onclick="…" / ondblclick="…"  -> se leen con getAttribute
 
-   AsÃ­ la acciÃ³n se ejecuta siempre, en cualquier navegador, sin depender de
-   eventos sintÃ©ticos. El click nativo, si llega (Android), se deduplica por
+   Así la acción se ejecuta siempre, en cualquier navegador, sin depender de
+   eventos sintéticos. El click nativo, si llega (Android), se deduplica por
    elemento y ventana de tiempo.
 
    Reglas:
-   - Solo actÃºa en dispositivos tÃ¡ctiles; en escritorio no interviene en nada.
+   - Solo actúa en dispositivos táctiles; en escritorio no interviene en nada.
    - Si el dedo se desplaza > 10 px, era scroll: se ignora.
-   - Si el gesto venÃ­a cancelado (preventDefault del joystick del juego), se ignora.
-   - No actÃºa sobre campos de texto (les quitarÃ­a el foco y cerrarÃ­a el teclado).
+   - Si el gesto venía cancelado (preventDefault del joystick del juego), se ignora.
+   - No actúa sobre campos de texto (les quitaría el foco y cerraría el teclado).
    - Si el elemento declara onclick y ondblclick, gana onclick (como en
      escritorio); el doble clic nativo sigue intacto porque en ordenador este
-     mÃ³dulo no interviene. */
+     módulo no interviene. */
 function initGlobalTapToClick(){
   const MAX_DRIFT = 10;      // px de movimiento tolerados para considerarlo tap
   const PER_EL_MS = 700;     // anti rebote por elemento
@@ -43,8 +42,8 @@ function initGlobalTapToClick(){
   }
 
   const handlerMap = new WeakMap();   // elemento -> { click:[fn], dblclick:[fn] }
-  const lastTapAt = new WeakMap();    // elemento -> instante del Ãºltimo tap
-  const lastNative = new WeakMap();   // elemento -> instante del Ãºltimo click nativo
+  const lastTapAt = new WeakMap();    // elemento -> instante del último tap
+  const lastNative = new WeakMap();   // elemento -> instante del último click nativo
   let pending = null;                 // gesto en curso
 
   function handlersFor(el){
@@ -58,8 +57,8 @@ function initGlobalTapToClick(){
       '.start-btn, .sm-item, .arc-cmd-item, .sidebar-toggle, [onclick], [ondblclick], [data-url]')) || el;
   }
 
-  /** Ejecuta la acciÃ³n del elemento: por onClick, por onDblClick o por data-url.
-   *  Es la garantÃ­a de que la acciÃ³n corre, sin depender de eventos sintÃ©ticos. */
+  /** Ejecuta la acción del elemento: por onClick, por onDblClick o por data-url.
+   *  Es la garantía de que la acción corre, sin depender de eventos sintéticos. */
   function dispatchTap(el){
     const node = targetFor(el);
     if(isEditable(node)) return;
@@ -77,7 +76,7 @@ function initGlobalTapToClick(){
       const propDbl = (typeof node.ondblclick === 'function') ? node.ondblclick : null;
       const synth = { type: 'click', target: node, currentTarget: node, defaultPrevented: false, cancelable: true };
 
-      // Orden: onclick primero (como en escritorio), ondblclick despuÃ©s.
+      // Orden: onclick primero (como en escritorio), ondblclick después.
       if(h && h.click.length)      { h.click.forEach(function(fn){ fn.call(node, synth); }); ran = true; }
       if(propClick)                { propClick.call(node, synth); ran = true; }
       if(attrClick)                { new Function('event', attrClick).call(node, synth); ran = true; }
@@ -104,8 +103,8 @@ function initGlobalTapToClick(){
       if((type === 'click' || type === 'dblclick') && typeof fn === 'function' && this && typeof this === 'object'){
         try { handlersFor(this)[type].push(fn); } catch(e){}
         const self = this;
-        // Se registra tambiÃ©n el handler normal (ratÃ³n y click nativo), pero
-        // deduplicado contra el tap para no ejecutar la acciÃ³n dos veces.
+        // Se registra también el handler normal (ratón y click nativo), pero
+        // deduplicado contra el tap para no ejecutar la acción dos veces.
         return nativeAdd.call(this, type, function(ev){
           if(isTouchDevice() && ev && ev.isTrusted){
             const now = Date.now();
@@ -139,7 +138,7 @@ function initGlobalTapToClick(){
     });
   } catch(e){ /* idem */ }
 
-  // --- DetecciÃ³n del gesto ---
+  // --- Detección del gesto ---
   document.addEventListener('pointerdown', function(e){
     if(e.pointerType === 'mouse'){ pending = null; return; }
     pending = { t: e.target, x: e.clientX, y: e.clientY, moved: false, cancelled: false };
@@ -158,7 +157,7 @@ function initGlobalTapToClick(){
     if(e.pointerType === 'mouse'){ pending = null; return; }
     const p = pending; pending = null;
     if(!p || p.cancelled || p.moved) return;
-    if(e.defaultPrevented) return;              // ya lo gestionÃ³ otro (joystick, juego)
+    if(e.defaultPrevented) return;              // ya lo gestionó otro (joystick, juego)
     dispatchTap(e.target || p.t);
   }, { capture: true, passive: true });
 

@@ -1,0 +1,2507 @@
+1|
+2|/* =====================================================================
+3|   ARCSYSTEMS XP — APPLICATION SCRIPT MANIFEST (ver README.md para el mapa)
+4|   ===================================================================== */
+5|
+6|/* ============ UTILIDADES GLOBALES ============ */
+7|/** Escapa HTML para inyectar texto de usuario de forma segura en innerHTML. */
+8|function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+9|/** JSON.parse tolerante a corrupción: devuelve fallback si falla. */
+10|function safeParse(raw, fallback){ try{ const v = JSON.parse(raw); return v === null ? fallback : v; } catch(e){ return fallback; } }
+11|
+12|/* ============ AUDIO ============ */
+13|let soundOn=true, AC=null, masterComp=null;
+14|function ac(){
+15|  if(!AC){
+16|    try{
+17|      AC=new (window.AudioContext||window.webkitAudioContext)();
+18|      masterComp=AC.createDynamicsCompressor();
+19|      masterComp.threshold.setValueAtTime(-18, AC.currentTime);
+20|      masterComp.knee.setValueAtTime(12, AC.currentTime);
+21|      masterComp.ratio.setValueAtTime(8, AC.currentTime);
+22|      masterComp.attack.setValueAtTime(0.003, AC.currentTime);
+23|      masterComp.release.setValueAtTime(0.2, AC.currentTime);
+24|      masterComp.connect(AC.destination);
+25|    }catch(e){}
+26|  }
+27|  return AC;
+28|}
+29|function masterNode(a){ return masterComp || a.destination; }
+30|function noiseBuf(){ const a=ac(); if(!a)return null; if(a._nb)return a._nb;
+31|  const b=a.createBuffer(1,a.sampleRate,a.sampleRate); const d=b.getChannelData(0);
+32|  for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1; a._nb=b; return b; }
+33|function toggleSound(){ soundOn=!soundOn; document.getElementById('sndBtn').textContent=soundOn?'🔊 Sound: ON':' Sound: OFF'; }
+34|function sfx(f,d,type,v){ if(!soundOn)return; const a=ac(); if(!a)return;
+35|  const o=a.createOscillator(),g=a.createGain(); o.type=type||'square'; o.frequency.value=f; g.gain.value=v||.1;
+36|  o.connect(g); g.connect(masterNode(a)); o.start(); g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+d); o.stop(a.currentTime+d); }
+37|
+38|const flutePitches=[880, 987.77, 1174.66, 1318.51, 1567.98]; // A5, B5, D6, E6, G6
+39|let flutePitchIdx=0;
+40|function laserSfx(){
+41|  if(!soundOn)return; const a=ac(); if(!a)return; const t=a.currentTime;
+42|  const freq=flutePitches[(flutePitchIdx++)%flutePitches.length];
+43|  // Pure melodic flute sine whistle
+44|  const fo=a.createOscillator(), fg=a.createGain();
+45|  fo.type='sine';
+46|  fo.frequency.setValueAtTime(freq, t);
+47|  fo.frequency.exponentialRampToValueAtTime(freq*1.06, t+0.035);
+48|  fo.frequency.exponentialRampToValueAtTime(freq, t+0.1);
+49|  fg.gain.setValueAtTime(0.0001, t);
+50|  fg.gain.linearRampToValueAtTime(0.14, t+0.015);
+51|  fg.gain.exponentialRampToValueAtTime(0.0001, t+0.11);
+52|  fo.connect(fg); fg.connect(masterNode(a));
+53|  fo.start(t); fo.stop(t+0.12);
+54|
+55|  // Air breath / flute attack transient
+56|  const bo=a.createOscillator(), bg=a.createGain();
+57|  bo.type='triangle';
+58|  bo.frequency.setValueAtTime(freq*2.2, t);
+59|  bo.frequency.exponentialRampToValueAtTime(freq*0.6, t+0.06);
+60|  bg.gain.setValueAtTime(0.05, t);
+61|  bg.gain.exponentialRampToValueAtTime(0.0001, t+0.07);
+62|  bo.connect(bg); bg.connect(masterNode(a));
+63|  bo.start(t); bo.stop(t+0.08);
+64|}
+65|function explosionSfx(p){ if(!soundOn)return; const a=ac(); if(!a)return; const t=a.currentTime; p=p||1;
+66|  const src=a.createBufferSource(); src.buffer=noiseBuf();
+67|  const f=a.createBiquadFilter(); f.type='lowpass';
+68|  f.frequency.setValueAtTime(1300*Math.min(p,1.6),t); f.frequency.exponentialRampToValueAtTime(48,t+.55);
+69|  const g=a.createGain(); g.gain.setValueAtTime(.5*Math.min(p,1.7),t); g.gain.exponentialRampToValueAtTime(.0001,t+.65);
+70|  src.connect(f); f.connect(masterNode(a)); src.start(t); src.stop(t+.7); }
+71|function powerSfx(){ if(!soundOn)return; const a=ac(); if(!a)return; const t=a.currentTime;
+72|  [523,659,784,1046,1318].forEach(function(f,i){ const o=a.createOscillator(),g=a.createGain(); o.type='square'; o.frequency.value=f;
+73|    g.gain.setValueAtTime(.0001,t+i*.045); g.gain.linearRampToValueAtTime(.11,t+i*.045+.012); g.gain.exponentialRampToValueAtTime(.0001,t+i*.045+.09);
+74|    o.connect(g); g.connect(masterNode(a)); o.start(t+i*.045); o.stop(t+i*.045+.1); }); }
+75|function hitSfx(){ if(!soundOn)return; const a=ac(); if(!a)return; const t=a.currentTime;
+76|  const src=a.createBufferSource(); src.buffer=noiseBuf();
+77|  const f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=420;
+78|  const g=a.createGain(); g.gain.setValueAtTime(.28,t); g.gain.exponentialRampToValueAtTime(.0001,t+.14);
+79|  src.connect(f); f.connect(masterNode(a)); src.start(t); src.stop(t+.15); }
+80|function chargeSfx(){ sfx(1400,.5,'sine',.08); sfx(1800,.5,'sine',.05); }
+81|function bossSfx(){ sfx(70,.9,'sawtooth',.22); sfx(95,.9,'sawtooth',.16); sfx(50,1.2,'sine',.2); }
+82|function dashSfx(){ if(!soundOn)return; const a=ac(); if(!a)return; const t=a.currentTime;
+83|  const src=a.createBufferSource(); src.buffer=noiseBuf();
+84|  const f=a.createBiquadFilter(); f.type='highpass'; f.frequency.setValueAtTime(3000,t); f.frequency.exponentialRampToValueAtTime(300,t+.25);
+85|  const g=a.createGain(); g.gain.setValueAtTime(.2,t); g.gain.exponentialRampToValueAtTime(.0001,t+.25);
+86|  src.connect(f); f.connect(masterNode(a)); src.start(t); src.stop(t+.26); }
+87|function bombSfx(){ if(!soundOn)return; const a=ac(); if(!a)return; const t=a.currentTime;
+88|  const o=a.createOscillator(),g=a.createGain(); o.type='sine';
+89|  o.frequency.setValueAtTime(60,t); o.frequency.exponentialRampToValueAtTime(900,t+.5);
+90|  g.gain.setValueAtTime(.3,t); g.gain.exponentialRampToValueAtTime(.0001,t+.7);
+91|  o.connect(g); g.connect(masterNode(a)); o.start(t); o.stop(t+.7);
+92|  explosionSfx(1.6); }
+93|function modReadySfx(){ if(!soundOn)return; sfx(1200,.08,'sine',.08); setTimeout(()=>sfx(1600,.08,'sine',.06),60); }
+94|function accessSfx(){ if(!soundOn)return; sfx(800,.1,'square',.08); setTimeout(()=>sfx(1200,.1,'square',.08),80); }
+95|function fanfareSfx(){
+96|  if(!soundOn)return; const a=ac(); if(!a)return; const t=a.currentTime;
+97|  const notes=[523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98];
+98|  notes.forEach(function(f,i){
+99|    const o=a.createOscillator(), g=a.createGain();
+100|    o.type='triangle'; o.frequency.setValueAtTime(f, t+i*0.09);
+101|    g.gain.setValueAtTime(0.0001, t+i*0.09);
+102|    g.gain.linearRampToValueAtTime(0.2, t+i*0.09+0.02);
+103|    g.gain.exponentialRampToValueAtTime(0.0001, t+i*0.09+0.35);
+104|    o.connect(g); g.connect(masterNode(a));
+105|    o.start(t+i*0.09); o.stop(t+i*0.09+0.38);
+106|    const o2=a.createOscillator(), g2=a.createGain();
+107|    o2.type='sine'; o2.frequency.setValueAtTime(f*2, t+i*0.09);
+108|    g2.gain.setValueAtTime(0.0001, t+i*0.09);
+109|    g2.gain.linearRampToValueAtTime(0.08, t+i*0.09+0.02);
+110|    g2.gain.exponentialRampToValueAtTime(0.0001, t+i*0.09+0.25);
+111|    o2.connect(g2); g2.connect(masterNode(a));
+112|    o2.start(t+i*0.09); o2.stop(t+i*0.09+0.28);
+113|  });
+114|}
+115|function warpSplitSfx(){
+116|  if(!soundOn)return; const a=ac(); if(!a)return; const t=a.currentTime;
+117|  sfx(720, .18, 'sine', .14);
+118|  setTimeout(()=>sfx(1080, .22, 'sine', .12), 40);
+119|  setTimeout(()=>sfx(1440, .25, 'sine', .1), 80);
+120|}
+121|function resonatorSfx(){
+122|  if(!soundOn)return; const a=ac(); if(!a)return; const t=a.currentTime;
+123|  [440, 554.37, 659.25, 880].forEach((f, i) => {
+124|    const o=a.createOscillator(), g=a.createGain();
+125|    o.type='sine'; o.frequency.value=f;
+126|    g.gain.setValueAtTime(0.0001, t+i*0.04);
+127|    g.gain.linearRampToValueAtTime(0.12, t+i*0.04+0.015);
+128|    g.gain.exponentialRampToValueAtTime(0.0001, t+i*0.04+0.28);
+129|    o.connect(g); g.connect(masterNode(a));
+130|    o.start(t+i*0.04); o.stop(t+i*0.04+0.3);
+131|  });
+132|}
+133|function chronoPeekSfx(){
+134|  if(!soundOn)return; const a=ac(); if(!a)return; const t=a.currentTime;
+135|  const o=a.createOscillator(), g=a.createGain();
+136|  o.type='sawtooth';
+137|  o.frequency.setValueAtTime(900, t);
+138|  o.frequency.exponentialRampToValueAtTime(140, t+0.35);
+139|  g.gain.setValueAtTime(0.16, t);
+140|  g.gain.exponentialRampToValueAtTime(0.0001, t+0.38);
+169|/* ============ BOOT XP ============ */
+170|(function(){
+171|  const spinHTML=Array.from({length:8},function(_,i){const a=i*Math.PI/4,x=50+38*Math.cos(a),y=50+38*Math.sin(a);
+172|    return '<i style="left:'+x+'%; top:'+y+'%; opacity:'+((i+1)/8)+'"></i>';}).join('');
+173|  document.getElementById('spin1').innerHTML=spinHTML; document.getElementById('spin2').innerHTML=spinHTML;
+174|  const biosLines=['ARCSYSTEMS BIOS v6.6.6 (C) 2094 Federal ARC Network','CPU : MEME-PROC 666 MHz',
+175|    'Detecting drives... C:\\ ARC   D:\\ MEMES   E:\\ NAVES   F:\\ BROWSER','Warning: toxic memes detected in sector 7G',
+176|    'Starting ARC SYSTEM Professional...',''];
+177|  const biosEl=document.getElementById('bios'), boot=document.getElementById('boot');
+178|  let bi=0,done=false,timers=[];
+179|  function later(fn,ms){ timers.push(setTimeout(fn,ms)); }
+180|  function typeBios(){
+181|    if(done)return;
+182|    if(bi<biosLines.length){
+183|      biosEl.textContent+=biosLines[bi++]+'\
+184|      // Poster-style POST memory counter for realism (counts up to 500M)
+185|      if(bi===1){
+186|        let mem=0;
+187|        const memLine='Memory Test: ';
+188|        later(function tickMem(){
+189|          if(done)return;
+190|          mem=Math.min(mem+Math.floor(18000000+Math.random()*22000000), 524288000);
+191|          const cur=biosEl.textContent.split('\
+192|          biosEl.textContent=cur + memLine + String(mem).replace(/\B(?=(\d{3})+(?!\d))/g,',') + '   ' + (mem>=524288000?'OK':'');
+193|          if(mem<524288000) later(tickMem, 90);
+194|          else { biosEl.textContent+='\
+195|        }, 120);
+196|        return; // bi==1 line already printed above
+197|      }
+198|      later(typeBios,240);
+199|    } else later(showLoad,500);
+200|  }
+201|  function showLoad(){ if(done)return; biosEl.style.display='none'; document.getElementById('xpload').classList.add('show'); later(showWelcome,2600); }
+202|  function showWelcome(){ if(done)return; document.getElementById('xpload').classList.remove('show'); document.getElementById('xpwelcome').classList.add('show'); later(finishBoot,1900); }
+203|  function finishBoot(){ if(done)return; done=true; timers.forEach(clearTimeout);
+204|    boot.classList.add('fade'); setTimeout(function(){ boot.style.display='none'; },650);
+205|    loginJingle();
+206|    setTimeout(function(){ spawnToast('✅ ARCSYSTEMS XP started. Welcome, infected node 😎'); },900); }
+207|  function loginJingle(){
+208|    if(!soundOn) return; const a=ac(); if(!a)return;
+209|    const notes=[659.25, 880.00, 1108.73]; // E5, A5, C#6
+210|    notes.forEach(function(f,i){
+211|      const t=a.currentTime + i*0.16;
+212|      const o=a.createOscillator(), g=a.createGain();
+213|      o.type='triangle'; o.frequency.setValueAtTime(f,t);
+214|      g.gain.setValueAtTime(0.0001,t);
+215|      g.gain.exponentialRampToValueAtTime(0.14,t+0.02);
+216|      g.gain.exponentialRampToValueAtTime(0.0001,t+0.5);
+217|      o.connect(g); g.connect(masterNode(a)); o.start(t); o.stop(t+0.55);
+218|    });
+219|    const t=a.currentTime+0.5;
+220|    const o2=a.createOscillator(), g2=a.createGain();
+221|    o2.type='sine'; o2.frequency.setValueAtTime(1760,t);
+222|    g2.gain.setValueAtTime(0.0001,t);
+223|    g2.gain.exponentialRampToValueAtTime(0.08,t+0.05);
+224|    g2.gain.exponentialRampToValueAtTime(0.0001,t+0.9);
+225|    o2.connect(g2); g2.connect(masterNode(a)); o2.start(t); o2.stop(t+1);
+226|  }
+227|  addEventListener('keydown',finishBoot); addEventListener('mousedown',finishBoot);
+228|  typeBios(); try{ sfx(1200,.06,'square',.06); }catch(e){} // BIOS POST beep
+229|})();
+230|
+231|/* ============ CONFIG ============ */
+232|const BLISS="url('https://image.qwenlm.ai/public_source/3d979a43-82ee-4343-8b69-e361d504124c/1a2ff0b7b-b28f-4d4d-9986-4323eaa63215.png') center/cover no-repeat";
+233|const WPS=[
+234| {id:'bliss',name:'XP Bliss',css:BLISS,prev:BLISS},
+235| {id:'azul',name:'Blue Moon',css:'linear-gradient(180deg,#3a8ae8 0%,#245edb 40%,#003399 100%)',prev:'linear-gradient(180deg,#3a8ae8,#003399)'},
+236| {id:'noche',name:'ARC Night',css:'radial-gradient(ellipse at 50% 30%, #10203a 0%, #01020a 70%)',prev:'radial-gradient(ellipse at 50% 30%, #10203a, #01020a)'},
+237| {id:'matrix',name:'Matrix',css:'repeating-linear-gradient(0deg, rgba(0,255,65,.14) 0 2px, transparent 2px 7px), linear-gradient(180deg,#001a00,#000)',prev:'repeating-linear-gradient(0deg, rgba(0,255,65,.3) 0 2px, #000 2px 7px)'},
+238| {id:'rosa',name:'Pink Meme',css:'linear-gradient(135deg,#ff9a9e 0%,#fad0c4 30%,#a18cd1 70%,#fbc2eb 100%)',prev:'linear-gradient(135deg,#ff9a9e,#a18cd1)'}];
+239|const THS=[{id:'',name:'Blue Moon',prev:'linear-gradient(180deg,#3f8cf3,#1941a5)'},
+240| {id:'green',name:'Olive Green',prev:'linear-gradient(180deg,#7ec96f,#2f6b28)'},
+241| {id:'silver',name:'Silver',prev:'linear-gradient(180deg,#f4f4f4,#8a8a8a)'},
+242| {id:'arc',name:'ARC Night',prev:'linear-gradient(180deg,#12203a,#00d4ff)'}];
+243|let curWP='bliss',curTH='';
+244|function buildConfig(){
+245|  const wg=document.getElementById('wpGrid'); wg.innerHTML='';
+246|  WPS.forEach(function(w){ const d=document.createElement('div'); d.className='cfg-opt'+(curWP===w.id?' sel':'');
+247|    d.innerHTML='<div class="cfg-prev" style="background:'+w.prev+'"></div><div class="cfg-name">'+w.name+'</div><div class="tick">'+(curWP===w.id?'✓':'')+'</div>';
+248|    d.onclick=function(){ curWP=w.id; document.getElementById('wallpaper').style.background=w.css; buildConfig(); spawnToast('🖼️ Wallpaper: "'+w.name+'"'); };
+249|    wg.appendChild(d); });
+250|  const tg=document.getElementById('thGrid'); tg.innerHTML='';
+251|  THS.forEach(function(t){ const d=document.createElement('div'); d.className='cfg-opt'+(curTH===t.id?' sel':'');
+252|    d.innerHTML='<div class="cfg-prev" style="background:'+t.prev+'"></div><div class="cfg-name">'+t.name+'</div><div class="tick">'+(curTH===t.id?'✓':'')+'</div>';
+253|    d.onclick=function(){ curTH=t.id; document.body.className=t.id?'theme-'+t.id:''; buildConfig(); spawnToast(' Theme: '+t.name); };
+254|    tg.appendChild(d); });
+255|}
+256|buildConfig();
+257|
+258|/* ============ CONTEXT MENU ============ */
+259|const ctxMenu=document.getElementById('ctxMenu');
+260|document.addEventListener('contextmenu',function(e){
+261|  if(e.target.closest('#msGrid')||e.target.closest('#navesGame')||e.target.closest('input,textarea'))return;
+262|  e.preventDefault(); ctxMenu.classList.add('show');
+263|  ctxMenu.style.left=Math.min(e.clientX,innerWidth-240)+'px'; ctxMenu.style.top=Math.min(e.clientY,innerHeight-280)+'px'; });
+264|document.addEventListener('mousedown',function(e){ if(!e.target.closest('#ctxMenu'))ctxMenu.classList.remove('show'); });
+265|ctxMenu.addEventListener('click',function(e){
+266|  const it=e.target.closest('.ctx-item'); if(!it)return; ctxMenu.classList.remove('show');
+267|  const a=it.dataset.a;
+268|  if(a==='refresh')spawnToast('🔄 Desktop refreshed.');
+269|  if(a==='copy')spawnToast('📋 Copied: 1 meme to clipboard.');
+270|  if(a==='paste')spawnToast('📥 Pasted: a cute virus joined.');
+271|  if(a==='cut')spawnToast('✂️ Cut: the ARC Network forbids cutting memes.');
+272|  if(a==='new')spawnToast('🆕 New → memes.txt created (lie).');
+273|  if(a==='personalize'||a==='config')openWindow('win-config');
+274|  if(a==='props')openWindow('win-config'); });
+275|
+276|/* ============ WINDOWS MANAGEMENT ============ */
+277|let zTop=600;
+278|function focusWin(w){ w.style.zIndex=++zTop; refreshTask(); }
+279|function uiWindowSfx(kind){ try{ if(kind==='open') sfx(700,.07,'triangle',.05); else if(kind==='close') sfx(420,.06,'triangle',.05); else sfx(600,.04,'square',.04); }catch(e){} }
+280|function openWindow(id){ const w=document.getElementById(id); if(!w)return; w.classList.add('open'); w.style.display='flex'; focusWin(w); uiWindowSfx('open');
+281|  if(id==='win-browser'){
+282|    clearAllPopups(); // silence virus popups while browsing
+283|    if(typeof browserTabs !== 'undefined' && browserTabs.length===0){ newTab(); }
+284|  } }
+285|function closeWindow(id){ const w=document.getElementById(id); if(!w)return; w.classList.remove('open'); w.style.display='none'; uiWindowSfx('close'); refreshTask(); }
+286|function minimize(id){ const w=document.getElementById(id); if(!w)return; w.style.display='none'; uiWindowSfx('min'); refreshTask(); }
+287|function maxWin(id){ const w=document.getElementById(id); if(!w)return;
+288|  if(w.dataset.max==='1'){ const p=JSON.parse(w.dataset.prev||'{}');
+289|    w.style.left=p.left||'100px'; w.style.top=p.top||'80px'; w.style.width=p.width||'500px'; w.style.height=p.height||'auto'; w.dataset.max='0'; }
+290|  else { w.dataset.prev=JSON.stringify({left:w.style.left,top:w.style.top,width:w.style.width,height:w.style.height});
+291|    w.style.left='2px'; w.style.top='2px'; w.style.width=(innerWidth-6)+'px'; w.style.height=(innerHeight-42)+'px'; w.dataset.max='1'; }
+292|  focusWin(w); }
+293|function taskClick(id){ const w=document.getElementById(id); if(!w)return;
+294|  if(w.style.display==='none'||!w.classList.contains('open'))openWindow(id);
+295|  else if(parseInt(w.style.zIndex)===zTop)minimize(id); else focusWin(w); }
+296|function refreshTask(){
+297|  ['win-main','win-browser','win-memes','win-note','win-games','win-mines','win-spider','win-pinball','win-config'].forEach(function(id){
+298|    const w=document.getElementById(id), b=document.getElementById('tb-'+id);
+299|    if(!b || !w) return;
+300|    // Taskbar shows ONLY currently-open apps; minimized ones stay but dimmed
+301|    const open = w.classList.contains('open');
+302|    const visible = open && w.style.display !== 'none';
+303|    b.style.display = open ? 'flex' : 'none';
+304|    b.style.opacity = visible ? 1 : 0.55;
+305|    b.classList.toggle('active', visible && parseInt(w.style.zIndex) === zTop);
+306|  });
+307|}
+308|document.querySelectorAll('.window').forEach(function(w){
+309|  const g=document.createElement('div'); g.className='grip';
+310|  g.addEventListener('mousedown',function(e){ e.preventDefault(); e.stopPropagation();
+311|    const r=w.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,sw=r.width,sh=r.height;
+312|    function mv(ev){ w.style.width=Math.max(280,sw+ev.clientX-sx)+'px'; w.style.height=Math.max(180,sh+ev.clientY-sy)+'px'; w.dataset.max='0'; }
+313|    function up(){ removeEventListener('mousemove',mv); removeEventListener('mouseup',up); }
+314|    addEventListener('mousemove',mv); addEventListener('mouseup',up); });
+315|  w.appendChild(g); });
+316|document.addEventListener('mousedown',function(e){
+317|  const tb=e.target.closest('.title-bar');
+318|  if(tb&&!e.target.closest('button')){
+319|    const w=tb.parentElement; focusWin(w);
+320|    if(w.dataset.max==='1')return;
+321|    const r=w.getBoundingClientRect(),ox=e.clientX-r.left,oy=e.clientY-r.top;
+322|    function mv(ev){ w.style.left=Math.min(Math.max(ev.clientX-ox,-40),innerWidth-80)+'px'; w.style.top=Math.min(Math.max(ev.clientY-oy,0),innerHeight-60)+'px'; }
+323|    function up(){ removeEventListener('mousemove',mv); removeEventListener('mouseup',up); }
+324|    addEventListener('mousemove',mv); addEventListener('mouseup',up);
+325|  }
+326|  else if(!e.target.closest('.start-menu')&&!e.target.closest('#startBtn')){ document.getElementById('startMenu').classList.remove('open'); document.getElementById('startBtn').classList.remove('on'); }
+327|  const w=e.target.closest('.window'); if(w)focusWin(w); });
+328|function toggleStart(ev){ if(ev)ev.stopPropagation(); const m=document.getElementById('startMenu'); m.classList.toggle('open');
+329|  document.getElementById('startBtn').classList.toggle('on',m.classList.contains('open')); }
+330|setInterval(function(){
+331|  const now=new Date();
+332|  const el=document.getElementById('clock');
+333|  if(el){ el.textContent=now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+334|    el.title=now.toLocaleDateString('en-US',{weekday:'long', year:'numeric', month:'long', day:'numeric'}); }
+335|},1000);
+336|
+337|/* ============ MOVABLE DESKTOP ICONS ============ */
+338|function initDesktopIcons(){
+339|  const icons = document.querySelectorAll('.dicon');
+340|  if(!icons.length) return;
+341|
+342|  // Initialize icon positions in grid layout on desktop
+343|  const isDesktop = window.innerWidth > 768;
+344|  const startX = 14;
+345|  const startY = 14;
+346|  const itemH = 78;
+347|  const itemW = 90;
+348|  const maxRowsPerCol = Math.max(3, Math.floor((window.innerHeight - 80) / itemH));
+349|
+350|  icons.forEach(function(icon, idx){
+351|    if(isDesktop){
+352|      const col = Math.floor(idx / maxRowsPerCol);
+353|      const row = idx % maxRowsPerCol;
+354|      const initX = startX + col * itemW;
+355|      const initY = startY + row * itemH;
+356|      icon.style.left = initX + 'px';
+357|      icon.style.top = initY + 'px';
+358|    }
+359|
+360|    // Drag-and-drop handler for desktop icons
+361|    icon.addEventListener('mousedown', function(e){
+362|      if(e.button !== 0) return; // only left click drags
+363|      if(window.innerWidth <= 768) return; // responsive mobile keeps sheet/grid
+364|      const startClientX = e.clientX;
+365|      const startClientY = e.clientY;
+366|      const rect = icon.getBoundingClientRect();
+367|      const offsetX = startClientX - rect.left;
+368|      const offsetY = startClientY - rect.top;
+369|      let isDragging = false;
+370|
+371|      function onMouseMove(ev){
+372|        const dx = ev.clientX - startClientX;
+373|        const dy = ev.clientY - startClientY;
+374|        if(!isDragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)){
+375|          isDragging = true;
+376|          icon.classList.add('dragging');
+377|        }
+378|        if(isDragging){
+379|          const newLeft = Math.min(Math.max(ev.clientX - offsetX, 0), window.innerWidth - 86);
+380|          const newTop = Math.min(Math.max(ev.clientY - offsetY, 0), window.innerHeight - 80);
+381|          icon.style.left = newLeft + 'px';
+382|          icon.style.top = newTop + 'px';
+383|        }
+384|      }
+385|
+386|      function onMouseUp(ev){
+387|        window.removeEventListener('mousemove', onMouseMove);
+388|        window.removeEventListener('mouseup', onMouseUp);
+389|        if(isDragging){
+390|          setTimeout(function(){ icon.classList.remove('dragging'); }, 50);
+391|        }
+392|      }
+393|
+394|      window.addEventListener('mousemove', onMouseMove);
+395|      window.addEventListener('mouseup', onMouseUp);
+396|    });
+397|  });
+398|}
+399|initDesktopIcons();
+400|window.addEventListener('resize', function(){
+401|  if(window.innerWidth > 768){
+402|    // Keep icons within viewport bounds on resize
+403|    document.querySelectorAll('.dicon').forEach(function(icon){
+404|      const curL = parseInt(icon.style.left, 10);
+405|      const curT = parseInt(icon.style.top, 10);
+406|      if(!isNaN(curL) && curL > window.innerWidth - 86){
+407|        icon.style.left = Math.max(10, window.innerWidth - 90) + 'px';
+408|      }
+409|      if(!isNaN(curT) && curT > window.innerHeight - 80){
+410|        icon.style.top = Math.max(10, window.innerHeight - 84) + 'px';
+411|      }
+412|    });
+413|  }
+414|});
+415|
+416|/* ============ AD / SCANNER / POPUPS / BSOD ============ */
+417|let adInterval=null,adSecs=15;
+418|function showAd(){ clearAllPopups(); document.getElementById('adOverlay').classList.add('show'); adSecs=15; paintAdTimer(); clearInterval(adInterval);
+419|  adInterval=setInterval(function(){ adSecs--; if(adSecs<=0)adSecs=15; paintAdTimer(); },1000); }
+420|function paintAdTimer(){ document.getElementById('adTimer').textContent='00:'+String(adSecs).padStart(2,'0'); }
+421|function hideAd(v){ clearInterval(adInterval); document.getElementById('adOverlay').classList.remove('show');
+422|  // The antivirus really worked: ALL threats gone and 60s of peace
+423|  clearAllPopups(); popupGraceUntil = Date.now() + 60000;
+424|  spawnToast('🛡️ System clean. 60s of virus-free peace...');
+425|}
+426|
+427|let scanning=false;
+428|function clearAllPopups(){ document.querySelectorAll('.popup').forEach(function(p){p.remove();}); }
+429|const logLines=[['C:\\ARC> closing popups... OK',''],['C:\\ARC> analyzing homework.doc ...',''],
+430| ['   ↳ threat: homework_virus.exe','bad'],['C:\\ARC> scanning RAM...',''],['   ↳ full of cached memes','warn'],
+431| ['C:\\ARC> detecting rickroll.exe ...',''],['   ↳ never gonna give you up','bad'],['C:\\ARC> querying the ARC Network...',''],
+432| ['   ↳ "all under control" 😈','warn']];
+433|const threatNames=['rickroll.exe','toxic_meme.dll','groovy_trojan.sys','worm_arc.bat','happy_keylogger.dll','reggaeton_adware.exe'];
+434|function log(m,c){ const el=document.getElementById('scanLog'),d=document.createElement('div'); if(c)d.className=c; d.textContent=m; el.appendChild(d); el.scrollTop=el.scrollHeight; }
+435|function startScan(){ if(scanning)return; scanning=true; clearAllPopups();
+436|  document.getElementById('threatBox').innerHTML=''; document.getElementById('scanLog').innerHTML='';
+437|  document.getElementById('sbState').textContent='Scanning...'; document.getElementById('scanBtn').textContent='⏳ SCANNING...';
+438|  let p=0,li=0,v=0;
+439|  const iv=setInterval(function(){ p+=Math.random()*4+1.5; if(p>=100)p=100;
+440|    document.getElementById('progFill').style.width=p+'%'; document.getElementById('progTxt').textContent='Scanning... '+Math.floor(p)+'%';
+441|    if(li<logLines.length&&Math.random()>.5){ log(logLines[li][0],logLines[li][1]); li++; }
+442|    if(Math.random()>.6&&v<666){ v+=Math.floor(Math.random()*40)+7; document.getElementById('virusCount').textContent=v;
+443|      const tb=document.getElementById('threatBox'),row=document.createElement('div'); row.className='threat-row';
+444|      row.innerHTML='<span>☣️ '+threatNames[Math.floor(Math.random()*threatNames.length)]+'</span><span>detected</span>';
+445|      tb.prepend(row); if(tb.children.length>5)tb.lastChild.remove(); }
+446|    if(p>=100){ clearInterval(iv); document.getElementById('virusCount').textContent=666;
+447|      log('C:\\ARC> 666 threats. Eliminating ALL...','bad'); document.getElementById('sbState').textContent='Cleaning...';
+448|      let k=0; const cl=setInterval(function(){ k++; document.getElementById('virusCount').textContent=Math.max(666-k*90,0);
+449|        if(k>=8){ clearInterval(cl); document.getElementById('virusCount').textContent=0; document.getElementById('threatBox').innerHTML='';
+450|          document.getElementById('progTxt').textContent='✅ PC 100% clean'; document.getElementById('sbState').textContent='Clean ✅';
+451|          document.getElementById('scanBtn').textContent='▶ SCAN AGAIN';
+452|          log('C:\\ARC> threats eliminated ✅',''); log('C:\\ARC> showing 12-month renewal...','warn');
+453|          confettiBurst(innerWidth/2,innerHeight/2); scanning=false; setTimeout(showAd,900); } },120); } },120); }
+454|
+455|const popData=[['⚠️ VIRUS DETECTED','rickroll.exe in your heart. Play it?','🎵'],['☣️ CRITICAL THREAT','toxic_meme.dll dancing reggaeton in your RAM.','🕺'],
+456| ['🚨 FEDERAL ALERT','Your PC was adopted by the ARC Network.','🌐'],['⚠️ SUBSCRIPTION','Your license is crying. Renew on piper.meme ',''],
+457| ['☣️ ERROR 666','Out of clean memes.','💀']];
+458|let popCount=0;
+459|let popupGraceUntil = 0; // post-antivirus "clean system" grace period
+460|function popupsSuppressed(){
+461|  if(Date.now() < popupGraceUntil) return true; // PC is clean... for now
+462|  const b=document.getElementById('win-browser');
+463|  const n=document.getElementById('navesGame');
+464|  return (b && b.style.display!=='none') || (n && n.classList.contains('show'));
+465|}
+466|function spawnPopup(){ if(scanning)return; if(popupsSuppressed())return;
+467|  if(document.querySelectorAll('.popup').length>=5)return;
+468|  const d=popData[Math.floor(Math.random()*popData.length)],el=document.createElement('div');
+469|  el.className='popup'; el.style.zIndex=500+(popCount++%40);
+470|  el.style.left=(60+Math.random()*(innerWidth-440))+'px'; el.style.top=(40+Math.random()*(innerHeight-340))+'px';
+471|  el.innerHTML='<div class="title-bar danger"><span>⚠️ VirusARC — Alert</span><div class="tb-btns"><button class="close" onclick="this.closest(\'.popup\').remove()">✕</button></div></div>'+
+472|   '<div class="pbody"><span class="pemoji">'+d[2]+'</span><div><b>'+d[0]+'</b><br>'+d[1]+'</div></div>'+
+473|   '<div class="pbtns"><button class="btn98" onclick="popAccept(this)">Accept</button><button class="btn98" onclick="popIgnore(this)">Ignore</button></div>';
+474|  document.getElementById('popLayer').appendChild(el);
+475|  el.querySelector('.title-bar').addEventListener('mousedown',function(e){ if(e.target.closest('button'))return;
+476|    const r=el.getBoundingClientRect(),ox=e.clientX-r.left,oy=e.clientY-r.top;
+477|    function mv(ev){ el.style.left=(ev.clientX-ox)+'px'; el.style.top=(ev.clientY-oy)+'px'; }
+478|    function up(){ removeEventListener('mousemove',mv); removeEventListener('mouseup',up); }
+479|    addEventListener('mousemove',mv); addEventListener('mouseup',up); }); }
+480|function popAccept(b){ b.closest('.popup').remove(); if(Math.random()>.5){spawnPopup();spawnPopup();} }
+481|function popIgnore(b){ b.closest('.popup').remove(); spawnPopup(); }
+482|setInterval(function(){
+483|  if(Math.random()>.30){ // ~70% cada 2.2s — la máquina está realmente infectada
+484|    spawnPopup();
+485|    if(Math.random()>.6) setTimeout(spawnPopup, 600); // ráfagas
+486|  }
+487|},2200);
+488|// Ambient simulated network notifications (keeps the OS feeling alive, never spammy)
+489|const AMBIENT_MSGS=['🌐 ARC Network: 1,000,000+ nodes online','📦 New block synced — height #6,660,042','🛰️ Node handshake OK (12ms)',
+490|  '🔒 Encrypted channel to piper.meme renewed','🧠 ARC AI: model refresh complete','💾 Auto-save: meme cache defragmented'];
+491|setInterval(function(){
+492|  const adOn = document.getElementById('adOverlay').classList.contains('show');
+493|  const n = document.getElementById('navesGame');
+494|  if(popupsSuppressed() || adOn) return; // don't compete with browser/game/ad
+495|  if(Math.random()<.5) spawnToast(AMBIENT_MSGS[Math.floor(Math.random()*AMBIENT_MSGS.length)]);
+496|}, 42000);
+497|function openMeme(name, url){ try{ sfx(880,.1,'square',.1); }catch(e){} if(url) window.open(url,'_blank'); }
+498|function soonClick(name){ const t=document.createElement('div'); t.className='popup'; t.style.width='340px'; t.style.zIndex=560;
+499|  t.style.left=(innerWidth/2-170)+'px'; t.style.top=(innerHeight/2-120)+'px';
+500|  t.innerHTML='<div class="title-bar purple"><span>🚧 '+name+'</span><div class="tb-btns"><button class="close" onclick="this.closest(\'.popup\').remove()">✕</button></div></div>'+
+501|   '<div class="pbody" style="flex-direction:column; align-items:center; text-align:center;"><span class="pemoji">🚧</span>'+
+502|   '<div><b>COMING SOON TO PIPER.MEME</b><br>"'+name+'" is in creative quarantine.</div></div>'+
+503|   '<div class="pbtns"><a class="btn98 green" href="https://piper.meme" target="_blank" rel="noopener">GO TO PIPER.MEME</a><button class="btn98" onclick="this.closest(\'.popup\').remove()">Wait</button></div>';
+504|  document.getElementById('popLayer').appendChild(t); }
+505|function spawnToast(msg){ const t=document.createElement('div'); t.className='popup'; t.style.width='320px'; t.style.zIndex=560;
+506|  t.style.left=(innerWidth/2-160)+'px'; t.style.top=(innerHeight/2-80)+'px';
+507|  t.innerHTML='<div class="title-bar green"><span> System</span><div class="tb-btns"><button class="close" onclick="this.closest(\'.popup\').remove()">✕</button></div></div><div class="pbody" style="font-size:12px;">'+msg+'</div>';
+508|  document.getElementById('popLayer').appendChild(t); setTimeout(function(){t.remove();},4000); }
+509|const showToast = spawnToast;
+510|
+511|let bsodTimer;
+512|function showBsod(c){ document.getElementById('bsodCause').textContent=c||'DO_NOT_TOUCH.exe'; document.getElementById('bsod').classList.add('show');
+513|  let p=0; clearInterval(bsodTimer); bsodTimer=setInterval(function(){ p=Math.min(p+Math.random()*9,100); document.getElementById('bsodPct').textContent=Math.floor(p); if(p>=100)clearInterval(bsodTimer); },200);
+514|  setTimeout(hideBsod,6000); }
+515|function hideBsod(){ document.getElementById('bsod').classList.remove('show'); clearInterval(bsodTimer); }
+516|function showShutdown(){ document.getElementById('shutdown').classList.add('show'); setTimeout(function(){ window.location.href='https://antivirusarc.meme'; },2400); }
+517|
+518|/* ============ MINESWEEPER ============ */
+519|let msBoard=[],msOpen=0,msFlags=0,msDead=false,msTimer=null,msSec=0,msStarted=false;
+520|function msFace(f){ const el=document.getElementById('msFace'); if(el) el.textContent=f; }
+521|  if(Date.now() < popupGraceUntil) return true; // PC is clean... for now
+522|  const b=document.getElementById('win-browser');
+523|  const n=document.getElementById('navesGame');
+524|  return (b && b.style.display!=='none') || (n && n.classList.contains('show'));
+525|}
+526|function spawnPopup(){ if(scanning)return; if(popupsSuppressed())return;
+527|  if(document.querySelectorAll('.popup').length>=5)return;
+528|  const d=popData[Math.floor(Math.random()*popData.length)],el=document.createElement('div');
+529|  el.className='popup'; el.style.zIndex=500+(popCount++%40);
+530|  el.style.left=(60+Math.random()*(innerWidth-440))+'px'; el.style.top=(40+Math.random()*(innerHeight-340))+'px';
+531|  el.innerHTML='<div class="title-bar danger"><span>⚠️ VirusARC — Alert</span><div class="tb-btns"><button class="close" onclick="this.closest(\'.popup\').remove()">✕</button></div></div>'+
+532|   '<div class="pbody"><span class="pemoji">'+d[2]+'</span><div><b>'+d[0]+'</b><br>'+d[1]+'</div></div>'+
+533|   '<div class="pbtns"><button class="btn98" onclick="popAccept(this)">Accept</button><button class="btn98" onclick="popIgnore(this)">Ignore</button></div>';
+534|  document.getElementById('popLayer').appendChild(el);
+535|  el.querySelector('.title-bar').addEventListener('mousedown',function(e){ if(e.target.closest('button'))return;
+536|    const r=el.getBoundingClientRect(),ox=e.clientX-r.left,oy=e.clientY-r.top;
+537|    function mv(ev){ el.style.left=(ev.clientX-ox)+'px'; el.style.top=(ev.clientY-oy)+'px'; }
+538|    function up(){ removeEventListener('mousemove',mv); removeEventListener('mouseup',up); }
+539|    addEventListener('mousemove',mv); addEventListener('mouseup',up); }); }
+540|function popAccept(b){ b.closest('.popup').remove(); if(Math.random()>.5){spawnPopup();spawnPopup();} }
+541|function popIgnore(b){ b.closest('.popup').remove(); spawnPopup(); }
+542|setInterval(function(){
+543|  if(Math.random()>.30){ // ~70% cada 2.2s — la máquina está realmente infectada
+544|    spawnPopup();
+545|    if(Math.random()>.6) setTimeout(spawnPopup, 600); // ráfagas
+546|  }
+547|},2200);
+548|// Ambient simulated network notifications (keeps the OS feeling alive, never spammy)
+549|const AMBIENT_MSGS=['🌐 ARC Network: 1,000,000+ nodes online','📦 New block synced — height #6,660,042','🛰️ Node handshake OK (12ms)',
+550|  '🔒 Encrypted channel to piper.meme renewed','🧠 ARC AI: model refresh complete','💾 Auto-save: meme cache defragmented'];
+551|setInterval(function(){
+552|  const adOn = document.getElementById('adOverlay').classList.contains('show');
+553|  const n = document.getElementById('navesGame');
+554|  if(popupsSuppressed() || adOn) return; // don't compete with browser/game/ad
+555|  if(Math.random()<.5) spawnToast(AMBIENT_MSGS[Math.floor(Math.random()*AMBIENT_MSGS.length)]);
+937|/* =====================================================
+938|   NAVES.EXE v4.2 — OPTIMIZADO + ARC BROWSER
+939|===================================================== */
+940|const nvCv=document.getElementById('nvCanvas'), nvCtx=nvCv.getContext('2d', { alpha: false, desynchronized: true });
+941|const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints>0;
+942|const isMobile = isTouch || innerWidth < 768;
+943|// Dynamic-resolution upscale for Canvas 2D. This is the closest practical
+944|// equivalent to FSR 1 for this renderer: gameplay coordinates stay logical
+945|// (CSS pixels), while the expensive scene is rasterized at a lower resolution.
+946|let nvRenderScale = isMobile ? 0.78 : 0.90;
+947|const NV_MIN_SCALE = isMobile ? 0.60 : 0.70;
+948|const NV_MAX_SCALE = 1.0;
+949|function nvApplyRenderScale(scale){
+950|  nvRenderScale = Math.max(NV_MIN_SCALE, Math.min(NV_MAX_SCALE, scale));
+951|  nvCv.width = Math.max(1, Math.floor(innerWidth * nvRenderScale));
+952|  nvCv.height = Math.max(1, Math.floor(innerHeight * nvRenderScale));
+953|  nvCtx.imageSmoothingEnabled = true;
+954|}
+955|// Single Unified Medium-Difficult Calibration (Arcade Challenge)
+956|const DM_BASE = 1.20;
+957|const BM_BASE = 1.15;
+958|const FAN_BASE = 4;
+959|const ASTRATE_BASE = 85;
+960|const VOLP_BASE = 0.35;
+961|const FIRER_BASE = 0.0055;
+962|
+963|const AFFIX_POOL = [
+964|  { id:'solar', name:'☀️ SOLAR FLARE', desc:'High radiation • Enemies attack +15% faster' },
+965|  { id:'meteor', name:'☄️ METEOR FIELD', desc:'Dense volatile asteroid belt ahead' },
+966|  { id:'armored', name:'🛡️ ARMORED FLEET', desc:'Vanguard hostiles reinforced with shields' },
+967|  { id:'warp', name:'🌀 WARP ANOMALY', desc:'Quantum distortions & hyper-speed projectiles' }
+968|];
+969|
+970|const ROUND_KINDS=['recon','kami','tactic','swarm','convoy','cruiser','quantum','spinner'];
+971|const ROUND_NAMES=['RECON SQUAD','KAMIKAZE STRIKE','TACTICAL AMBUSH','INSECTOID SWARM','HEAVY CONVOY','CRUISER ASSAULT','QUANTUM DISTORTION','DANMAKU SPIRAL'];
+972|
+973|// Official Arc Logo ship asset
+974|const arcShipImg = new Image();
+975|arcShipImg.src = 'assets/arc_ship.png';
+976|
+977|// Crypto token power-up assets (Circle, Piper, USDC)
+978|const itemCircleImg = new Image(); itemCircleImg.src = 'assets/item_circle.png';
+979|const itemPiperImg  = new Image(); itemPiperImg.src  = 'assets/item_piper.png';
+980|const itemUsdcImg   = new Image(); itemUsdcImg.src   = 'assets/item_usdc.png';
+981|const enemyAssetFiles = { kami:'needle.svg', camo:'wraith.svg', swarm:'splitter.svg', convoy:'bastion.svg', cruiser:'boss.svg', shield:'bastion.svg', spinner:'pulse.svg', quantum:'beacon.svg', hunt:'hunter.svg' };
+982|const enemyAssetImages = {};
+983|Object.keys(enemyAssetFiles).forEach(function(type){
+984|  const img = new Image(); img.decoding = 'async'; img.src = 'assets/enemies/' + enemyAssetFiles[type];
+985|  img.onload = function(){ enemyAssetImages[type] = img; };
+986|});
+987|
+988|/* ================= SPATIAL HASH GRID (O(1) COLLISIONS) ================= */
+989|const GRID_CELL_SIZE = 80;
+990|let gridCols = 1, gridRows = 1;
+991|let spatialBuckets = [];
+992|let spatialQueryStamp = 0;
+993|
+994|function initSpatialGrid(w, h){
+995|  gridCols = Math.ceil(w / GRID_CELL_SIZE) + 1;
+996|  gridRows = Math.ceil(h / GRID_CELL_SIZE) + 1;
+997|  const total = gridCols * gridRows;
+998|  spatialBuckets = new Array(total);
+999|  for(let i = 0; i < total; i++) spatialBuckets[i] = [];
+1000|}
+1001|
+1002|function clearSpatialGrid(){
+1003|  for(let i = 0; i < spatialBuckets.length; i++) spatialBuckets[i].length = 0;
+1004|}
+1005|
+1006|function insertSpatialGrid(item, x, y, r, type){
+1007|  item._spType = type;
+1008|  const minX = Math.max(0, Math.floor((x - r) / GRID_CELL_SIZE));
+1009|  const maxX = Math.min(gridCols - 1, Math.floor((x + r) / GRID_CELL_SIZE));
+1010|  const minY = Math.max(0, Math.floor((y - r) / GRID_CELL_SIZE));
+1011|  const maxY = Math.min(gridRows - 1, Math.floor((y + r) / GRID_CELL_SIZE));
+1012|  for(let cy = minY; cy <= maxY; cy++){
+1013|    const offset = cy * gridCols;
+1014|    for(let cx = minX; cx <= maxX; cx++){
+1015|      spatialBuckets[offset + cx].push(item);
+1016|    }
+1017|  }
+1018|}
+1019|
+1020|function querySpatialGrid(x, y, r, cb){
+1021|  const minX = Math.max(0, Math.floor((x - r) / GRID_CELL_SIZE));
+1022|  const maxX = Math.min(gridCols - 1, Math.floor((x + r) / GRID_CELL_SIZE));
+1023|  const minY = Math.max(0, Math.floor((y - r) / GRID_CELL_SIZE));
+1024|  const maxY = Math.min(gridRows - 1, Math.floor((y + r) / GRID_CELL_SIZE));
+1025|  spatialQueryStamp++;
+1026|  for(let cy = minY; cy <= maxY; cy++){
+1027|    const offset = cy * gridCols;
+1028|    for(let cx = minX; cx <= maxX; cx++){
+1029|      const b = spatialBuckets[offset + cx];
+1030|      for(let i = 0; i < b.length; i++){
+1031|        const it = b[i];
+1032|        if(it._qStamp !== spatialQueryStamp){
+1033|          it._qStamp = spatialQueryStamp;
+1034|          if(cb(it, it._spType)) return true;
+1035|        }
+1036|      }
+1037|    }
+1038|  }
+1039|  return false;
+1040|}
+1041|
+1042|/* ================= OBJECT POOLS (ZERO GC ENGINE) ================= */
+1043|const MAX_BULLETS = 250;
+1044|const bulletPool = Array.from({length: MAX_BULLETS}, function(){
+1045|  return { active: false, x: 0, y: 0, vx: 0, vy: 0, rot: 0, green: false, isMaster: false, pierce: 1 };
+1046|});
+1047|function spawnPlayerBullet(p){
+1048|  for(let i = 0; i < MAX_BULLETS; i++){
+1049|    const b = bulletPool[i];
+1050|    if(!b.active){
+1051|      b.active = true;
+1052|      b.x = p.x; b.y = p.y; b.vx = p.vx || 0; b.vy = p.vy || 0;
+1053|      b.rot = p.rot || 0; b.green = !!p.green; b.isMaster = !!p.isMaster;
+1054|      b.pierce = p.pierce || 1;
+1055|      NV.bullets.push(b);
+1056|      return b;
+1057|    }
+1058|  }
+1059|  return null;
+1060|}
+1061|
+1062|const MAX_EBULLETS = 300;
+1063|const ebulletPool = Array.from({length: MAX_EBULLETS}, function(){
+1064|  return { active: false, x: 0, y: 0, vx: 0, vy: 0, kind: 'normal', rot: 0, spin: 0, t: 0, baseX: 0, amp: 0, trail: [] };
+1065|});
+1066|function spawnEnemyBullet(p){
+1441|const NV={ on:false, state:'off', diff:'arcade', diffName:'ARCADE CHALLENGE',
+1442|  score:0, _score:0, _scoreKey:0x5F37, _scoreShadow:(0^0x5F37)+0x1A4,
+1443|  best:0, allTimeBest:0, recordBroken:false, activeTab:'weekly',
+1444|  lives:3, round:1, roundKind:'recon', roundAffix:null, budget:0, squadCd:0, t:0,
+1445|  freeze:0, glitch:0, shake:0, muzzle:0, crtT:0, hyperT:0, bootLine:0, bootChar:0, transT:0, transTxt:'', hideBgFx:false,
+1446|  combo:0, comboT:0, bombs:2, bombMax:3, bombCd:0, dashCd:0, misCd:0, lasCd:0, bombT:0, bombHit:false, laserFlash:0, astCd:60, cdT:0, cdStage:4, railgunT:0, railgunX:0,
+1447|  overdriveT:0, dronesT:0, cryoT:0, phaseT:0, magnetT:0,
+1448|  usdcActive:0, piperSymphonyT:0, empT:0, chronoT:0, symphonyCount:0,
+1449|  decoys:[], sonicRings:[], orbitals:[],
+1450|  stars:[], bin:[], neb:null, nebX:0, groups:[],
+1451|  player:null, bullets:[], missiles:[], ebullets:[], enemies:[], asteroids:[], scraps:[], pows:[],
+1452|  debris:[], rings:[], boss:null, bossIdx:0, keys:{},
+1453|  briefingSkip:false, pilotName:'',
+1454|  touch:{ active:false, dx:0, dy:0, stickX:80, stickY:80 },
+1455|  lastTime:0, frameCount:0 };
+1456|const BOOT_LINES=['SYSTEMS ONLINE...','ARC LINK ESTABLISHED','CONTROL TRANSFERRED TO PILOT_'];
+1457|
+1458|function nvShow(id){
+1459|  ['nvMenu','nvHelp','nvPause','nvOver','nvBriefing','nvLeaderboard'].forEach(function(x){
+1460|    const el = document.getElementById(x);
+1461|    if(el) el.classList.remove('show');
+1462|  });
+1463|  if(id){
+1464|    const el = document.getElementById(id);
+1465|    if(el) el.classList.add('show');
+1466|    // Hide touch controls when any modal / menu is open
+1467|    const tj = document.getElementById('touchJoy');
+1468|    const tb = document.getElementById('touchBtns');
+1469|    if(tj) tj.classList.remove('show');
+1470|    if(tb) tb.classList.remove('show');
+1471|  } else if(NV.state==='playing' && isTouch){
+1472|    const tj = document.getElementById('touchJoy');
+1473|    const tb = document.getElementById('touchBtns');
+1474|    if(tj) tj.classList.add('show');
+1475|    if(tb) tb.classList.add('show');
+1476|  }
+1477|}
+1478|function nvResize(){ nvApplyRenderScale(nvRenderScale); initSpatialGrid(innerWidth, innerHeight); initTextureAtlas(); }
+1479|function makeNebula(){
+1480|  const c=document.createElement('canvas'); c.width=512; c.height=512;
+1481|  const x=c.getContext('2d');
+1482|  const cols=['rgba(120,40,200,','rgba(200,40,160,','rgba(0,140,200,','rgba(60,0,120,'];
+1483|  for(let i=0;i<10;i++){
+1484|    const r=80+Math.random()*140, cx=Math.random()*512, cy=Math.random()*512;
+1485|    const g=x.createRadialGradient(cx,cy,0,cx,cy,r);
+1486|    const col=cols[Math.floor(Math.random()*cols.length)];
+1487|    g.addColorStop(0,col+(.16+Math.random()*.12)+')'); g.addColorStop(1,col+'0)');
+1488|    x.fillStyle=g; x.beginPath(); x.arc(cx,cy,r,0,7); x.fill();
+1489|  }
+1490|  return c;
+1491|}
+1492|/* === STARSHIP ARC: VIRUS HUNTERS — cinematic studio intro === */
+1493|let nvIntroTimers = [];
+1494|function nvIntroTone(f, at, dur, type, vol){
+1495|  if(!soundOn) return; const a=ac(); if(!a) return;
+1496|  try{
+1497|    const t=a.currentTime + at;
+1498|    const o=a.createOscillator(), g=a.createGain();
+1499|    o.type=type||'square'; o.frequency.setValueAtTime(f, t);
+1500|    g.gain.setValueAtTime(0.0001, t);
+1501|    g.gain.exponentialRampToValueAtTime(vol||0.16, t+0.015);
+1502|    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+1503|    o.connect(g); g.connect(masterNode(a));
+1504|    o.start(t); o.stop(t+dur+0.02);
+1505|  }catch(e){}
+1506|}
+1507|function arcStudiosJingle(){
+1508|  // "Coin" jingle — classic console: B5 -> E6 with sparkle tail
+1509|  nvIntroTone(987.77, 0.00, .12, 'square', .16);
+1510|  nvIntroTone(1318.51, 0.12, .55, 'square', .16);
+1511|  nvIntroTone(2637.02, 0.12, .30, 'sine', .06);
+1512|  nvIntroTone(1975.53, 0.30, .45, 'triangle', .07);
+1513|}
+1514|function piperJingle(){
+1515|  // 16-bit power chord swell: root + fifth + octave saw stack
+1516|  nvIntroTone(220.00, 0.00, .70, 'sawtooth', .10);
+1517|  nvIntroTone(329.63, 0.05, .70, 'sawtooth', .08);
+1518|  nvIntroTone(440.00, 0.10, .80, 'sawtooth', .09);
+1519|  nvIntroTone(880.00, 0.55, .40, 'triangle', .10);
+1520|}
+1521|function runNvIntro(){
+1522|  const intro=document.getElementById('nvIntro');
+1523|  const arc=document.getElementById('siArc'), pip=document.getElementById('siPiper');
+1524|  if(!intro){ beginNvCrt(); return; }
+1525|  NV.state='intro';
+1526|  intro.classList.add('show');
+1527|  arc.classList.add('show');
+1528|  arcStudiosJingle();
+1529|  nvIntroTimers.push(setTimeout(function(){
+1530|    arc.classList.remove('show'); pip.classList.add('show'); piperJingle();
+1531|  }, 2900));
+1532|  nvIntroTimers.push(setTimeout(endNvIntro, 5800));
+1533|}
+1534|function endNvIntro(){
+1535|  if(NV.state!=='intro') return;
+1536|  nvIntroTimers.forEach(clearTimeout); nvIntroTimers=[];
+1537|  const intro=document.getElementById('nvIntro');
+1538|  document.getElementById('siArc').classList.remove('show');
+1539|  document.getElementById('siPiper').classList.remove('show');
+1540|  intro.classList.remove('show');
+1541|  beginNvCrt();
+1542|}
+1543|function beginNvCrt(){
+1544|  if(NV.state!=='intro' && NV.state!=='crt') return;
+1545|  NV.state='crt'; NV.crtT=0;
+1546|  sfx(60,.4,'sine',.2); sfx(120,.5,'sine',.12);
+1547|}
+1548|function uiTickSfx(){ sfx(1400,.05,'square',.07); }
+1549|function uiConfirmSfx(){ sfx(660,.09,'square',.12); setTimeout(function(){sfx(990,.12,'square',.1);},70); }
+1550|
+1551|function openNaves(){
+1552|  document.getElementById('navesGame').classList.add('show');
+1553|  clearAllPopups(); // silence virus engine while playing
+1554|  NV.on=true; NV.state='intro'; NV.crtT=0; nvResize(); nvShow(null);
+1555|  NV.score=0; NV.combo=0; NV.round=0;
+1556|  document.getElementById('nvScore').textContent='0';
+1557|  document.getElementById('nvScore').classList.remove('pulse');
+1558|  document.getElementById('nvCombo').textContent='';
+1559|  document.getElementById('nvRound').textContent='SECTOR 1';
+1560|  document.getElementById('nvBossWrap').classList.remove('show');
+1561|  document.getElementById('nvHUD').classList.remove('show');
+1562|  document.getElementById('touchJoy').classList.remove('show');
+1563|  document.getElementById('touchBtns').classList.remove('show');
+1564|  NV.stars=Array.from({length:isMobile?80:120},function(){return {x:Math.random()*innerWidth,y:Math.random()*innerHeight,z:Math.random()*2+.5};});
+1565|  NV.bin=Array.from({length:20},function(){return {x:Math.random()*innerWidth,y:Math.random()*innerHeight,s:.4+Math.random()*.8,txt:''};});
+1566|  NV.neb=makeNebula();
+1567|  syncGetRecords();
+1568|  updatePilotPlate();
+1569|  runNvIntro();
+1570|}
+1571|function updatePilotPlate(){
+1572|  const el=document.getElementById('nvPilotPlate'); if(!el)return;
+1573|  const best=getAbsoluteRecordScore();
+1574|  const name=localStorage.getItem('arc_last_pilot')||'ROOKIE';
+1575|  el.textContent = best>0 ? ('PILOT '+name+' — RECORD: '+best.toLocaleString()) : 'NEW PILOT — NO FLIGHT RECORD YET';
+1576|}
+1577|function closeNaves(){ NV.on=false; NV.state='off'; document.getElementById('navesGame').classList.remove('show');
+1578|  document.getElementById('touchJoy').classList.remove('show');
+1579|  document.getElementById('touchBtns').classList.remove('show'); }
+1580|function nvToMenu(){
+1581|  NV.state='menu'; nvShow('nvMenu'); updatePilotPlate();
+1582|  document.getElementById('touchJoy').classList.remove('show');
+1583|  document.getElementById('touchBtns').classList.remove('show');
+1584|  NV.score=0; NV.combo=0; NV.round=0;
+1585|  document.getElementById('nvScore').textContent='0';
+1586|  document.getElementById('nvScore').classList.remove('pulse');
+1587|  document.getElementById('nvCombo').textContent='';
+1588|  document.getElementById('nvRound').textContent='ROUND 1';
+1589|  document.getElementById('nvHUD').classList.remove('show');
+1590|}
+1591|function nvCycleDiff(){ /* Fixed to Arcade Challenge */ }
+1592|function nvResume(){ NV.state='playing'; nvShow(null); }
+1593|function nvStart(){
+1594|  NV.state='briefing'; nvShow(null); document.getElementById('nvHUD').classList.add('show');
+1595|  NV.score=0; NV._score=0; NV._scoreShadow=(0^NV._scoreKey)+0x1A4;
+1655|    }
+1656|  },1000);
+1657|}
+1658|/** Limpia TODO el campo de juego (acción + pools) antes de una nueva ronda. */
+1659|function clearArena(){
+1660|  // Total map wipe: no asteroids, no enemies, no bullets, no debris, no boss
+1661|  NV.enemies=[]; NV.asteroids=[]; NV.ebullets=[]; NV.missiles=[];
+1662|  NV.pows=[]; NV.scraps=[]; NV.debris=[]; NV.rings=[]; NV.groups=[];
+1663|  NV.decoys=[]; NV.sonicRings=[]; NV.orbitals=[]; NV.railgunT=0; NV.boss=null; NV.budget=0;
+1664|  NV.bullets=[];
+1665|  for(let i=0;i<MAX_PARTS;i++) partsPool[i].active=false;
+1666|  for(let i=0;i<MAX_BULLETS;i++) bulletPool[i].active=false;
+1667|  for(let i=0;i<MAX_EBULLETS;i++) ebulletPool[i].active=false;
+1668|  for(let i=0;i<MAX_MISSILES;i++) missilePool[i].active=false;
+1669|  if(NV.player){ NV.player.inv=Math.max(NV.player.inv,90); }
+1670|  document.getElementById('nvBossWrap').classList.remove('show');
+1671|}
+1672|/** Avanza de sector: afijos procedurales, presupuesto de oleada, boss cada 5. */
+1673|function nextRound(){
+1674|  NV.state='playing';
+1675|  NV.round++;
+1676|  // Strictly ensure score starts at zero on Sector 1 start
+1677|  if(NV.round===1){
+1678|    NV.score=0;
+1679|    NV.combo=0;
+1680|    document.getElementById('nvScore').textContent='0';
+1681|    document.getElementById('nvScore').classList.remove('pulse');
+1682|    document.getElementById('nvCombo').textContent='';
+1683|  }
+1684|  const isBoss = (NV.round % 5 === 0);
+1685|  const kindIdx = (NV.round - 1) % ROUND_KINDS.length;
+1686|  NV.roundKind = isBoss ? 'boss' : ROUND_KINDS[kindIdx];
+1687|
+1688|  // Procedural affixes starting from Sector 3
+1689|  NV.roundAffix = (NV.round > 2 && !isBoss && Math.random() < 0.65)
+1690|    ? AFFIX_POOL[Math.floor(Math.random() * AFFIX_POOL.length)]
+1691|    : null;
+1692|
+1693|  // Infinite procedural scaling budget
+1694|  const baseBudget = 18 + NV.round * 4 + Math.floor(NV.round / 5) * 8;
+1695|  if(isBoss){
+1696|    NV.budget = 8;
+1697|    nvSpawnBoss();
+1698|  } else {
+1699|    NV.budget = baseBudget;
+1700|    if(NV.roundAffix && NV.roundAffix.id === 'meteor') NV.astCd = 25;
+1701|  }
+1702|
+1703|  const affixTag = NV.roundAffix ? ' • ' + NV.roundAffix.name : '';
+1704|  const sectorTitle = isBoss ? ('SECTOR ' + NV.round + ' — ☠ FLAGSHIP BOSS') : ('SECTOR ' + NV.round + ' — ' + ROUND_NAMES[kindIdx] + affixTag);
+1705|  document.getElementById('nvRound').textContent = sectorTitle;
+1706|  // Affix warning banner so the player reads the rule before dying by it
+1707|  if(NV.roundAffix){
+1708|    showStatus('⚠️ ' + NV.roundAffix.name + ' — ' + NV.roundAffix.desc);
+1709|    sfx(300,.3,'triangle',.12);
+1710|  }
+1711|
+1712|  const isMob = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window) || (innerWidth < 768) || (innerHeight > innerWidth);
+1713|  NV.squadCd = isMob ? 55 : 80; // breathing room before the next wave arrives
+1714|  if(isTouch){
+1715|    const tj = document.getElementById('touchJoy');
+1716|    const tb = document.getElementById('touchBtns');
+1717|    if(tj) tj.classList.add('show');
+1718|    if(tb) tb.classList.add('show');
+1719|  }
+1720|  // Spawn immediate vanguard wave at round start so screen has continuous action right away
+1721|  if(!isBoss){
+1722|    spawnSquad();
+1723|  }
+1724|}
+1725|/** Genera la oleada según el tipo de sector actual (grace: sin fuego 1.2s). */
+1726|function spawnSquad(){
+1727|  const maxEnemiesOnScreen = isMobile ? 12 : 20;
+1728|  if(NV.enemies.length >= maxEnemiesOnScreen){
+1729|    NV.squadCd = 25; // Delay next spawn until player clears the screen
+1730|    return;
+1731|  }
+1732|  const W=innerWidth;
+1733|  const H=innerHeight;
+1734|  // Smooth pacing: 1.2s fire grace at wave start so the player can read the formation
+1735|  NV.empT = Math.max(NV.empT, 70);
+1736|  const isMob = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window) || (W < 768) || (H > W);
+1737|  const mobSpeedMul = isMob ? 1.65 : 1.0;
+1738|  const r = Math.max(1, NV.round || 1);
+1739|  const prog = Math.min((r - 1) / 7, 1.5);
+1740|  const dm = (0.85 + prog * 0.45) * (NV.roundAffix && NV.roundAffix.id === 'solar' ? 1.15 : 1) * mobSpeedMul;
+1741|  const n = NV.round <= 2
+1742|    ? 2 + Math.floor(Math.random()*2)  // gentler opening sectors
+1743|    : 3 + Math.floor(Math.random()*3) + Math.min(Math.floor(NV.round / 4), 4);
+1744|  const topY = isMob ? (-15 - Math.random()*30) : (-90 - Math.random()*60);
+1745|  const maxSpread = isMob ? Math.min(32, Math.floor((W - 80) / n)) : 62;
+1746|
+1747|  if(NV.roundKind==='recon'){
+1748|    const cx = Math.max(50, Math.min(W - 50, W * 0.25 + Math.random() * W * 0.5));
+1749|    const g={y:topY, vy:(.5+Math.random()*.25)*dm, cx:cx, sway:Math.random()*6};
+1750|    NV.groups.push(g);
+1751|    const shape=Math.random()<.5?'V':'L';
+1752|    for(let i=0;i<n;i++){
+1753|      const dx= shape==='V'? (i-(n-1)/2)*maxSpread : (i%2? -1:1)*(Math.min(22, maxSpread/2)+Math.floor(i/2)*maxSpread);
+1754|      const dy= shape==='V'? Math.abs(i-(n-1)/2)*(isMob?18:30) : Math.floor(i/2)*(isMob?28:46);
+1755|      NV.enemies.push({type:'hunt',g:g,dx:dx,dy:dy,x:g.cx+dx,y:g.y+dy,phase:Math.random()*6.28,spd:.012,vy:.3*mobSpeedMul,t:Math.random()*100,flash:0,free:false});
+1756|    }
+1757|  } else if(NV.roundKind==='kami'){
+1758|    for(let i=0;i<n;i++) NV.enemies.push({type:'kami',x:35+Math.random()*(W-70),y:topY - Math.random()*(isMob?60:180),vx:0,vy:2*mobSpeedMul,t:Math.random()*50,flash:0,burst:false});
+1759|    if(Math.random()<.5) NV.enemies.push({type:'quantum',x:Math.max(50, Math.min(W-50, W*.3+Math.random()*W*.4)),y:topY-20,vx:0,vy:.8*mobSpeedMul,hp:2,t:0,warpCd:70,flash:0});
+1760|  } else if(NV.roundKind==='tactic'){
+1761|    for(let i=0;i<Math.max(1,Math.floor(n/3));i++) NV.enemies.push({type:'camo',x:40+Math.random()*(W-80),y:topY - Math.random()*(isMob?50:120),st:0,timer:50+Math.random()*80,t:0,flash:0});
+1762|    NV.enemies.push({type:'shield',x:Math.max(55, Math.min(W-55, W*.3+Math.random()*W*.4)),y:topY-20,vx:Math.random()<.5?1:-1,vy:.4*mobSpeedMul,hp:6,maxHp:6,t:0,flash:0,fireCd:60});
+1763|    const cx = Math.max(50, Math.min(W-50, W*.25+Math.random()*W*.5));
+1764|    const g={y:topY, vy:.45*dm, cx:cx, sway:Math.random()*6};
+1765|    NV.groups.push(g);
+1766|    for(let i=0;i<Math.max(2,n-2);i++) NV.enemies.push({type:'hunt',g:g,dx:(i-(n-3)/2)*maxSpread,dy:(i%2)*(isMob?22:40),x:g.cx,y:g.y,phase:Math.random()*6.28,spd:.013,vy:.3*mobSpeedMul,t:0,flash:0,free:false});
+1767|  } else if(NV.roundKind==='swarm'){
+1768|    for(let i=0;i<n*2;i++) NV.enemies.push({type:'swarm',x:20+Math.random()*(W-40),y:topY - Math.random()*(isMob?90:240),vx:(Math.random()-.5)*2,vy:(1+Math.random()*1.5)*mobSpeedMul,t:Math.random()*100,flash:0});
+1769|    if(Math.random()<.6) NV.enemies.push({type:'spinner',x:Math.max(50, Math.min(W-50, W*.3+Math.random()*W*.4)),y:topY-15,vx:(Math.random()-.5)*.8,vy:.5*mobSpeedMul,hp:4,t:0,flash:0,spinAng:0});
+1770|    if(NV.round>=3 && Math.random()<.7) NV.enemies.push({type:'beacon',x:Math.max(60, Math.min(W-60, W*.3+Math.random()*W*.4)),y:topY-40,vx:0,vy:.35*mobSpeedMul,hp:6,maxHp:6,t:0,flash:0,fireCd:80,ringCd:140});
+1771|  } else if(NV.roundKind==='convoy'){
+1772|    const cx=Math.max(60, Math.min(W-60, W*.25+Math.random()*W*.5));
+1773|    NV.enemies.push({type:'convoy',x:cx,y:topY,vx:0,vy:.5*dm,hp:5,t:0,flash:0});
+1774|    NV.enemies.push({type:'cruiser',x:Math.max(45, Math.min(W-45, cx+(Math.random()<.5?-60:60))),y:topY-35,vx:0,vy:.35*dm,hp:10,maxHp:10,t:0,flash:0,pulseCd:130,fireCd:55});
+1775|    for(let i=0;i<3;i++) NV.enemies.push({type:'hunt',g:null,dx:0,dy:0,x:Math.max(30,Math.min(W-30,cx+(i<2?-40:40))),y:topY+(i%2)*30,phase:Math.random()*6.28,spd:.014,vy:.35*mobSpeedMul,t:0,flash:0,free:true});
+1776|  } else if(NV.roundKind==='cruiser'){
+1777|    NV.enemies.push({type:'cruiser',x:W*.5,y:topY-25,vx:1,vy:.35*dm,hp:10,maxHp:10,t:0,flash:0,pulseCd:130,fireCd:45});
+1778|    for(let i=0;i<3;i++) NV.enemies.push({type:'hunt',g:null,dx:0,dy:0,x:W*(.25+i*.25),y:topY,phase:Math.random()*6.28,spd:.014,vy:.35*mobSpeedMul,t:0,flash:0,free:true});
+1779|  } else if(NV.roundKind==='quantum'){
+1780|    for(let i=0;i<3;i++) NV.enemies.push({type:'quantum',x:W*(.25+i*.25),y:topY-i*(isMob?22:40),vx:0,vy:.8*mobSpeedMul,hp:2,t:i*20,warpCd:60+i*20,flash:0});
+1781|  } else if(NV.roundKind==='spinner'){
+1782|    NV.enemies.push({type:'spinner',x:W*.35,y:topY-15,vx:.5,vy:.4*mobSpeedMul,hp:4,t:0,flash:0,spinAng:0});
+1783|    NV.enemies.push({type:'spinner',x:W*.65,y:topY-35,vx:-.5,vy:.4*mobSpeedMul,hp:4,t:30,flash:0,spinAng:Math.PI});
+1784|    for(let i=0;i<6;i++) NV.enemies.push({type:'swarm',x:20+Math.random()*(W-40),y:topY-Math.random()*(isMob?80:160),vx:(Math.random()-.5)*2,vy:1.2*mobSpeedMul,t:Math.random()*100,flash:0});
+1785|  }
+1786|}
+1787|function nvSpawnBoss(){
+1788|  NV.bossIdx++;
+1789|  const type = NV.bossIdx%2===1 ? 'ac' : 'fab';
+1790|  const scaling = 1 + (NV.round / 5 - 1) * 0.35;
+1791|  const hpMul = 1.15 * scaling;
+1792|  if(type==='ac'){
+1793|    NV.boss={type:'ac',x:innerWidth/2,y:-180,dir:1,entering:true,phase:1,
+1794|      plates:[-96,-32,32,96].map(function(o){const hp=Math.ceil(22*hpMul);return {off:o,hp:hp,max:hp};}),
+1995|    setTimeout(function(){
+1996|      NV.state='over'; NV.best=Math.max(NV.best,NV.score);
+1997|      const topRecord = getAbsoluteRecordScore();
+1998|      const isNewAbs = (NV.score >= topRecord && NV.score > 0) || NV.recordBroken;
+1999|      const recBanner = document.getElementById('nvNewRecordBanner');
+2000|      if(recBanner){
+2001|        if(isNewAbs){
+2002|          recBanner.style.display = 'block';
+2003|          fanfareSfx();
+2004|        } else {
+2005|          recBanner.style.display = 'none';
+2006|        }
+2007|      }
+2008|      document.getElementById('nvFinalScore').textContent='SCORE: '+NV.score;
+2009|      document.getElementById('nvFinalRound').textContent='ROUND: '+NV.round;
+2010|      document.getElementById('nvBest').textContent='RECORD: '+Math.max(NV.best, topRecord);
+2011|      const lastPilot = localStorage.getItem('arc_last_pilot')||'';
+2012|      document.getElementById('nvPilotName').value=NV.pilotName||lastPilot;
+2013|      document.getElementById('lbSaveMsg').textContent='';
+2014|      document.getElementById('nvHUD').classList.remove('show');
+2015|      nvShow('nvOver');
+2016|      setTimeout(function(){ document.getElementById('nvPilotName').focus(); },100);
+2017|      explosionSfx(1.6);
+2018|    },1500);
+2019|  }
+2020|}
+2021|function killEnemy(e,idx,givePow){
+2022|  let boomScale = 1.0, boomType = 'normal', pts = 100, deb = 2;
+2023|  if(e.type==='cruiser'){ boomScale=1.8; boomType='volatile'; pts=350; deb=4; }
+2024|  else if(e.type==='shield'){ boomScale=1.4; boomType='normal'; pts=250; deb=3; }
+2025|  else if(e.type==='beacon'){ boomScale=1.5; boomType='volatile'; pts=300; deb=3; }
+2026|  else if(e.type==='spinner'){ boomScale=1.3; boomType='purple'; pts=220; deb=3; }
+2027|  else if(e.type==='quantum'){ boomScale=1.2; boomType='purple'; pts=180; deb=2;
+2028|    // SPLITTER: divides into 2 swarm drones on death
+2029|    for(let s=-1;s<=1;s+=2){
+2030|      NV.enemies.push({type:'swarm',x:e.x+s*14,y:e.y,vx:s*1.4,vy:1.4,t:Math.random()*100,flash:0});
+2031|    }
+2032|  }
+2033|  else if(e.type==='camo'){ boomScale=1.2; boomType='purple'; pts=150; deb=2; }
+2034|  else if(e.type==='convoy'){ boomScale=1.5; boomType='volatile'; pts=200; deb=3; }
+2035|  else if(e.type==='kami'){ boomScale=1.1; boomType='normal'; pts=120; deb=2; }
+2036|  else if(e.type==='swarm'){ boomScale=0.8; boomType='normal'; pts=60; deb=1; }
+2037|
+2038|  nvBoom(e.x, e.y, boomScale, boomType);
+2039|  nvDebris(e.x, e.y, deb);
+2040|  addScore(pts, e.type!=='hunt');
+2041|  if(e.type!=='hunt') NV.freeze=Math.max(NV.freeze, 4);
+2042|  const dropChance = (typeof ownedMemes !== 'undefined' && ownedMemes.shitcoin) ? 0.32 : 0.16;
+2043|  if(givePow!==false && Math.random() < dropChance) NV.pows.push({x:e.x, y:e.y, vy:1.5, type:randomPowerUp()});
+2044|  NV.enemies.splice(idx,1);
+2045|}
+2046|function randomPowerUp(){
+2047|  const r=Math.random();
+2048|  if(r<.18) return 'piper';
+2049|  if(r<.36) return 'circle';
+2050|  if(r<.52) return 'usdc';
+2051|  if(r<.66) return 'E';
+2052|  if(r<.78) return '+';
+2053|  if(r<.88) return 'Y';
+2054|  if(r<.95) return 'P';
+2055|  return 'B';
+2056|}
+2057|function detonateAsteroid(a,idx){
+2058|  nvBoom(a.x,a.y,1.6,'volatile'); NV.rings.push({x:a.x,y:a.y,r:10,max:170});
+2059|  NV.freeze=Math.max(NV.freeze,4); addScore(80,true);
+2060|  for(let i=NV.enemies.length-1;i>=0;i--){ const e=NV.enemies[i];
+2061|    if(Math.hypot(e.x-a.x,e.y-a.y)<170) killEnemy(e,i,false); }
+2062|  for(let i=NV.asteroids.length-1;i>=0;i--){ const o=NV.asteroids[i];
+2063|    if(o!==a && o.vol && Math.hypot(o.x-a.x,o.y-a.y)<170){ NV.asteroids.splice(i,1); detonateAsteroid(o,i); } }
+2064|  const at=NV.asteroids.indexOf(a); if(at>=0) NV.asteroids.splice(at,1);
+2065|}
+2066|function doDash(){
+2067|  // 1. WARP DASH — directional teleport + invulnerable + clears nearby enemy bullets
+2068|  const p=NV.player; if(!p||NV.dashCd>0||NV.state!=='playing')return;
+2069|  NV.dashCd=60; p.dashT=14; p.inv=Math.max(p.inv,40);
+2070|  p.face = p.ax!==0 ? p.ax : p.face;
+2071|  warpSplitSfx(); showStatus('🌀 WARP DASH');
+2072|  // Directional teleport toward current movement input (default: up)
+2073|  const K=NV.keys;
+2074|  let dxp=(K['ArrowRight']||K['d']||K['D']?1:0)-(K['ArrowLeft']||K['a']||K['A']?1:0);
+2075|  let dyp=(K['ArrowDown']||K['s']||K['S']?1:0)-(K['ArrowUp']||K['w']||K['W']?1:0);
+2076|  if(NV.touch && (NV.touch.dx||NV.touch.dy)){ dxp=NV.touch.dx; dyp=NV.touch.dy; }
+2077|  if(dxp===0&&dyp===0){ dyp=-1; }
+2078|  const m=Math.hypot(dxp,dyp);
+2079|  const ox=p.x, oy=p.y;
+2096|/* ============ LEADERBOARD & ALL-TIME RECORDS (CRYPTOGRAPHICALLY SIGNED) ============ */
+2097|const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+2098|const _SEC_SALT = 'ARC_VIRUS_v5_SALT_9973';
+2099|
+2100|/** Firma FNV v2 del record (name|score|round|date|ts|nonce|salt). Barrera anti-tamper; no es criptografía real porque la sal vive en el cliente. */
+2101|function computeRecordSig(entry){
+2102|  // v2 signature: timestamp + nonce are part of the hash (anti-replay)
+2103|  const str = (entry.name||'') + '|' + (entry.score||0) + '|' + (entry.round||0) + '|' + (entry.date||'') +
+2104|              '|' + (entry._ts||0) + '|' + (entry._n||'') + '|' + _SEC_SALT;
+2105|  return fnv1a(str);
+2106|}
+2107|
+2108|function fnv1a(str){
+2109|  let h = 0x811c9dc5;
+2110|  for(let i=0; i<str.length; i++){
+2111|    h ^= str.charCodeAt(i);
+2112|    h = Math.imul(h, 0x01000193);
+2113|  }
+2114|  return (h >>> 0).toString(16);
+2115|}
+2116|
+2117|function computeRecordSigV1(entry){
+2118|  // Legacy signature (before timestamp+nonce)
+2119|  return fnv1a((entry.name||'') + '|' + (entry.score||0) + '|' + (entry.round||0) + '|' + (entry.date||'') + '|' + _SEC_SALT);
+2120|}
+2121|
+2122|function verifyRecordIntegrity(entry){
+2123|  if(!entry || typeof entry.score !== 'number' || typeof entry.name !== 'string' || !entry._sig) return false;
+2124|  // Accept both v2 (current) and legacy v1 signatures so old records survive the upgrade
+2125|  return entry._sig === computeRecordSig(entry) || entry._sig === computeRecordSigV1(entry);
+2126|}
+2127|
+2128|function getWeeklyEpoch(){
+2129|  let epoch = parseInt(localStorage.getItem('arc_weekly_epoch'), 10);
+2130|  if(!epoch || isNaN(epoch) || (Date.now() - epoch) >= WEEK_MS){
+2131|    epoch = Date.now();
+2132|    localStorage.setItem('arc_weekly_epoch', epoch);
+2133|    localStorage.setItem('arc_weekly_leaderboard', JSON.stringify([]));
+2134|  }
+2135|  return epoch;
+2136|}
+2137|
+2138|function getWeeklyData(){
+2139|  getWeeklyEpoch();
+2140|  try{
+2141|    const d = localStorage.getItem('arc_weekly_leaderboard');
+2142|    if(!d) return [];
+2143|    const parsed = JSON.parse(d);
+2144|    if(!Array.isArray(parsed)) return [];
+2145|    const valid = parsed.filter(function(e){ return verifyRecordIntegrity(e); });
+2146|    if(valid.length !== parsed.length){
+2147|      saveWeeklyData(valid);
+2148|    }
+2149|    return valid;
+2150|  }catch(e){ return []; }
+2151|}
+2152|
+2153|// Bulletproof Deduplication: Guarantees strictly ONE record per pilot name, keeping only their highest score
+2154|function deduplicateAndRank(list){
+2155|  if(!Array.isArray(list)) return [];
+2156|  const map = new Map();
+2157|  for(let i = 0; i < list.length; i++){
+2158|    const entry = list[i];
+2159|    if(!entry || typeof entry.score !== 'number') continue;
+2160|    const cleanName = (entry.name || 'PILOT').trim().toUpperCase().slice(0, 10) || 'PILOT';
+2161|    const normalized = {
+2162|      name: cleanName,
+2163|      score: entry.score,
+2164|      round: entry.round || 1,
+2165|      date: entry.date || new Date().toLocaleDateString('en-US'),
+2166|      _sig: entry._sig || computeRecordSig({ name: cleanName, score: entry.score, round: entry.round || 1, date: entry.date || '' })
+2167|    };
+2168|    if(!map.has(cleanName)){
+2169|      map.set(cleanName, normalized);
+2170|    } else {
+2171|      const existing = map.get(cleanName);
+2172|      if(normalized.score > existing.score || (normalized.score === existing.score && normalized.round > existing.round)){
+2173|        map.set(cleanName, normalized);
+2174|      }
+2175|    }
+2176|  }
+2177|  const unique = Array.from(map.values());
+2178|  unique.sort(function(a, b){
+2179|    return b.score - a.score || b.round - a.round;
+2180|  });
+2181|  return unique.slice(0, 10);
+2182|}
+2183|
+2184|function getWeeklyData(){
+2185|  getWeeklyEpoch();
+2186|  try{
+2187|    const d = localStorage.getItem('arc_weekly_leaderboard');
+2188|    if(!d) return [];
+2189|    const parsed = JSON.parse(d);
+2190|    if(!Array.isArray(parsed)) return [];
+2191|    const valid = parsed.filter(function(e){ return verifyRecordIntegrity(e); });
+2192|    const clean = deduplicateAndRank(valid);
+2193|    if(clean.length !== parsed.length){
+2194|      saveWeeklyData(clean);
+2195|    }
+2196|    return clean;
+2197|  }catch(e){ return []; }
+2198|}
+2199|
+2200|function saveWeeklyData(data){
+2201|  const clean = deduplicateAndRank(data);
+2202|  localStorage.setItem('arc_weekly_leaderboard', JSON.stringify(clean));
+2203|}
+2204|
+2205|function getAllTimeData(){
+2206|  try{
+2207|    const d = localStorage.getItem('arc_alltime_records');
+2208|    if(!d) return [];
+2209|    const parsed = JSON.parse(d);
+2210|    if(!Array.isArray(parsed)) return [];
+2211|    const valid = parsed.filter(function(e){ return verifyRecordIntegrity(e); });
+2212|    const clean = deduplicateAndRank(valid);
+2213|    if(clean.length !== parsed.length){
+2214|      saveAllTimeData(clean);
+2215|    }
+2216|    return clean;
+2217|  }catch(e){ return []; }
+2218|}
+2219|
+2220|function saveAllTimeData(data){
+2221|  const clean = deduplicateAndRank(data);
+2222|  localStorage.setItem('arc_alltime_records', JSON.stringify(clean));
+2223|}
+2224|
+2225|function getAbsoluteRecordScore(){
+2226|  const all = getAllTimeData();
+2227|  return all.length > 0 ? all[0].score : 0;
+2228|}
+2229|
+2230|let weeklyTimerInterval = null;
+2231|function updateWeeklyCountdown(){
+2232|  const epoch = getWeeklyEpoch();
+2233|  const remaining = Math.max(0, (epoch + WEEK_MS) - Date.now());
+2234|  const days = Math.floor(remaining / (24 * 3600 * 1000));
+2235|  const hours = Math.floor((remaining % (24 * 3600 * 1000)) / (3600 * 1000));
+2236|  const mins = Math.floor((remaining % (3600 * 1000)) / (60 * 1000));
+2237|  const secs = Math.floor((remaining % (60 * 1000)) / 1000);
+2238|  const el = document.getElementById('lbWeeklyCountdown');
+2239|  if(el) el.textContent = `${days}d ${hours}h ${mins}m ${secs}s`;
+2240|}
+2241|
+2242|function switchLbTab(tab){
+2243|  NV.activeTab = tab;
+2244|  const tabW = document.getElementById('tabWeeklyBtn');
+2245|  const tabA = document.getElementById('tabAllTimeBtn');
+2246|  const notice = document.getElementById('lbWeeklyNotice');
+2247|  if(tab === 'weekly'){
+2248|    if(tabW) tabW.classList.add('active');
+2249|    if(tabA) tabA.classList.remove('active');
+2250|    if(notice) notice.style.display = 'block';
+2251|    updateWeeklyCountdown();
+2252|    if(!weeklyTimerInterval) weeklyTimerInterval = setInterval(updateWeeklyCountdown, 1000);
+2253|  } else {
+2254|    if(tabA) tabA.classList.add('active');
+2255|    if(tabW) tabW.classList.remove('active');
+2256|    if(notice) notice.style.display = 'none';
+2257|    if(weeklyTimerInterval){ clearInterval(weeklyTimerInterval); weeklyTimerInterval = null; }
+2258|  }
+2259|  renderLeaderboard();
+2260|}
+2261|
+2262|function updateOrInsertRecord(list, newEntry){
+2263|  const cleanList = Array.isArray(list) ? list.slice() : [];
+2264|  cleanList.push(newEntry);
+2265|  return deduplicateAndRank(cleanList);
+2266|}
+2267|
+2268|function syncPostRecord(entry){
+2269|  try {
+2270|    fetch('api/records.php', {
+2271|      method: 'POST',
+2272|      headers: { 'Content-Type': 'application/json' },
+2273|      body: JSON.stringify({ entry: entry })
+2274|    }).then(function(res){
+2275|      if(!res.ok) throw new Error();
+2276|      return res.json();
+2277|    }).then(function(data){
+2278|      if(data && Array.isArray(data.allTime)) saveAllTimeData(data.allTime);
+2279|      if(data && Array.isArray(data.weekly)) saveWeeklyData(data.weekly);
+2280|      renderLeaderboard(entry.name);
+2281|    }).catch(function(){
+2282|      // Offline fallback: records already stored in localStorage
+2283|    });
+2284|  } catch(e){}
+2285|}
+2286|
+2287|function syncGetRecords(){
+2288|  try {
+2289|    fetch('api/records.php', { method: 'GET' })
+2290|      .then(function(res){ if(!res.ok) throw new Error(); return res.json(); })
+2291|      .then(function(data){
+2292|        if(data && Array.isArray(data.allTime)){
+2293|          let mergedAll = getAllTimeData();
+2294|          data.allTime.forEach(function(e){ mergedAll = updateOrInsertRecord(mergedAll, e); });
+2295|          saveAllTimeData(mergedAll);
+2296|        }
+2297|        if(data && Array.isArray(data.weekly)){
+2298|          let mergedWk = getWeeklyData();
+2299|          data.weekly.forEach(function(e){ mergedWk = updateOrInsertRecord(mergedWk, e); });
+2300|          saveWeeklyData(mergedWk);
+2301|        }
+2302|        renderLeaderboard();
+2303|      }).catch(function(){});
+2304|  } catch(e){}
+2305|}
+2306|
+2307|function saveLeaderboard(){
+2308|  const nameInput=document.getElementById('nvPilotName');
+2309|  const name=(nameInput.value||'PILOT').trim().toUpperCase().slice(0,10)||'PILOT';
+2310|  NV.pilotName=name;
+2311|  localStorage.setItem('arc_last_pilot',name);
+2312|
+2313|  const prevTop1 = getAbsoluteRecordScore();
+2314|  const legitimateScore = Math.max(0, NV.score);
+2315|  const entry={ name:name, score:legitimateScore, round:Math.max(1, NV.round), date:new Date().toLocaleDateString('en-US') };
+2316|  entry._ts = Date.now();
+2317|  entry._n  = Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2);
+2318|  entry._sig = computeRecordSig(entry);
+2319|
+2320|  // 1. Save to Weekly Leaderboard (strictly 1 record per pilot: overwrites lower, deletes old, preserves best)
+2321|  const weekly = updateOrInsertRecord(getWeeklyData(), entry);
+2322|  saveWeeklyData(weekly);
+2323|
+2324|  // 2. Save to Permanent All-Time Top 10 Records (strictly 1 record per pilot: overwrites lower, deletes old, preserves best)
+2325|  const allTime = updateOrInsertRecord(getAllTimeData(), entry);
+2326|  const isNewAbsolute = prevTop1 > 0 ? (legitimateScore > prevTop1) : (legitimateScore > 0);
+2327|  saveAllTimeData(allTime);
+2328|
+2329|  // 3. Post to Server API if hosted on server
+2330|  syncPostRecord(entry);
+2331|
+2332|  document.getElementById('lbSaveMsg').textContent='✅ Pilot record cryptographically signed & saved: '+name;
+2333|  setTimeout(function(){
+2334|    switchLbTab(isNewAbsolute ? 'alltime' : (NV.activeTab || 'weekly'));
+2335|    renderLeaderboard(name);
+2336|    nvShow('nvLeaderboard');
+2337|  }, 800);
+2338|}
+2339|
+2340|function renderLeaderboard(highlight){
+2341|  const isWeekly = (NV.activeTab || 'weekly') === 'weekly';
+2342|  const lb = isWeekly ? getWeeklyData() : getAllTimeData();
+2343|  const body=document.getElementById('lbBody');
+2344|  if(!body) return;
+2345|  body.innerHTML='';
+2346|  if(lb.length===0){
+2347|    const msg = isWeekly
+2348|      ? 'No records this week yet. Be the first to set a score!'
+2349|      : 'No all-time records yet. Be the first legend in the Hall of Fame!';
+2350|    body.innerHTML='<tr><td colspan="5" style="text-align:center; color:#9fd4ff; padding:20px;">'+msg+'</td></tr>';
+2351|    return;
+2352|  }
+2353|  const medals=['🥇','🥈','🥉'];
+2354|  lb.forEach(function(e,i){
+2355|    const tr=document.createElement('tr');
+2356|    if(highlight && e.name===highlight && e.score===NV.score && e.round===NV.round) tr.className='new';
+2357|    tr.innerHTML='<td>'+(medals[i]||(i+1))+'</td><td>'+e.name+'</td><td>'+e.score.toLocaleString()+'</td><td>'+e.round+'</td><td>'+e.date+'</td>';
+2358|    body.appendChild(tr);
+2359|  });
+2360|}
+2361|
+2362|/* ============ ARC BROWSER 3.0 PRO ============ */
+2363|let browserTabs = [{id:'tab1',title:'New Tab',url:'arc://newtab',favicon:'🏠',history:['arc://newtab'],historyIdx:0}];
+2364|let activeTabId = 'tab1';
+2365|let tabCounter = 1;
+2366|      .then(function(res){ if(!res.ok) throw new Error(); return res.json(); })
+2367|      .then(function(data){
+2368|        if(data && Array.isArray(data.allTime)){
+2369|          let mergedAll = getAllTimeData();
+2370|          data.allTime.forEach(function(e){ mergedAll = updateOrInsertRecord(mergedAll, e); });
+2371|          saveAllTimeData(mergedAll);
+2372|        }
+2373|        if(data && Array.isArray(data.weekly)){
+2374|          let mergedWk = getWeeklyData();
+2375|          data.weekly.forEach(function(e){ mergedWk = updateOrInsertRecord(mergedWk, e); });
+2376|          saveWeeklyData(mergedWk);
+2377|        }
+2378|        renderLeaderboard();
+2379|      }).catch(function(){});
+2380|  } catch(e){}
+2381|}
+2382|
+2383|function saveLeaderboard(){
+2384|  const nameInput=document.getElementById('nvPilotName');
+2385|  const name=(nameInput.value||'PILOT').trim().toUpperCase().slice(0,10)||'PILOT';
+2386|  NV.pilotName=name;
+2387|  localStorage.setItem('arc_last_pilot',name);
+2388|
+2389|  const prevTop1 = getAbsoluteRecordScore();
+2390|  const legitimateScore = Math.max(0, NV.score);
+2391|  const entry={ name:name, score:legitimateScore, round:Math.max(1, NV.round), date:new Date().toLocaleDateString('en-US') };
+2392|  entry._ts = Date.now();
+2393|  entry._n  = Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2);
+2394|  entry._sig = computeRecordSig(entry);
+2395|
+2396|  // 1. Save to Weekly Leaderboard (strictly 1 record per pilot: overwrites lower, deletes old, preserves best)
+2397|  const weekly = updateOrInsertRecord(getWeeklyData(), entry);
+2398|  saveWeeklyData(weekly);
+2399|
+2402|/* =====================================================
+2403|   ARC SYNTH LAB — CYBER CHIPTUNE SYNTHESIZER
+2404|   ===================================================== */
+2405|let synthOscType = 'sawtooth';
+2406|let synthDecay = 0.35;
+2407|let synthFilterFreq = 1800;
+2408|let synthDistortion = 15;
+2409|let synthArpActive = false;
+2410|let synthArpTimer = null;
+2411|let synthScopeAnim = null;
+2412|let synthActiveNotes = {};
+2413|
+2414|const SYNTH_KEYS = [
+2415|  { note: 'C4',  freq: 261.63, k: 'A', black: false },
+2416|  { note: 'C#4', freq: 277.18, k: 'W', black: true, left: 30 },
+2417|  { note: 'D4',  freq: 293.66, k: 'S', black: false },
+2418|  { note: 'D#4', freq: 311.13, k: 'E', black: true, left: 74 },
+2419|  { note: 'E4',  freq: 329.63, k: 'D', black: false },
+2420|  { note: 'F4',  freq: 349.23, k: 'F', black: false },
+2421|  { note: 'F#4', freq: 369.99, k: 'T', black: true, left: 160 },
+2422|  { note: 'G4',  freq: 392.00, k: 'G', black: false },
+2423|  { note: 'G#4', freq: 415.30, k: 'Y', black: true, left: 204 },
+2424|  { note: 'A4',  freq: 440.00, k: 'H', black: false },
+2425|  { note: 'A#4', freq: 466.16, k: 'U', black: true, left: 248 },
+2426|  { note: 'B4',  freq: 493.88, k: 'J', black: false },
+2427|  { note: 'C5',  freq: 523.25, k: 'K', black: false },
+2428|  { note: 'C#5', freq: 554.37, k: 'O', black: true, left: 334 },
+2429|  { note: 'D5',  freq: 587.33, k: 'L', black: false },
+2430|  { note: 'D#5', freq: 622.25, k: 'P', black: true, left: 378 },
+2431|  { note: 'E5',  freq: 659.25, k: ';', black: false }
+2432|];
+2433|
+2434|function playSynthNote(freq, noteName){
+2435|  if(!soundOn) toggleSound();
+2436|  const a = ac(); if(!a) return;
+2437|  const t = a.currentTime;
+2438|  
+2439|  // Highlight UI key
+2440|  const el = document.getElementById('skey-' + (noteName||'').replace('#','s'));
+2441|  if(el){
+2442|    el.classList.add('active');
+2443|    setTimeout(function(){ if(el) el.classList.remove('active'); }, Math.max(120, synthDecay * 600));
+2444|  }
+2445|
+2446|  // Audio Graph
+2447|  const osc = a.createOscillator();
+2448|  const filter = a.createBiquadFilter();
+2449|  const gain = a.createGain();
+2450|
+2451|  osc.type = synthOscType;
+2452|  osc.frequency.setValueAtTime(freq, t);
+2453|
+2454|  filter.type = 'lowpass';
+2455|  filter.frequency.setValueAtTime(synthFilterFreq, t);
+2456|  filter.frequency.exponentialRampToValueAtTime(Math.max(100, synthFilterFreq * 0.4), t + synthDecay);
+2457|
+2458|  gain.gain.setValueAtTime(0.0001, t);
+2459|  gain.gain.linearRampToValueAtTime(0.24, t + 0.02);
+2460|  gain.gain.exponentialRampToValueAtTime(0.0001, t + synthDecay);
+2461|
+2462|  osc.connect(filter);
+2463|  filter.connect(gain);
+2464|  gain.connect(masterNode(a));
+2465|
+2466|  osc.start(t);
+2467|  osc.stop(t + synthDecay + 0.05);
+2468|
+2469|  synthActiveNotes[freq] = { t: Date.now(), freq: freq };
+2470|}
+2471|
+2472|function playSynthDemo(melodyType){
+2473|  const tunes = {
+2474|    cyber: [
+2475|      { f: 440, d: 150 }, { f: 523.25, d: 150 }, { f: 659.25, d: 150 }, { f: 783.99, d: 250 },
+2476|      { f: 659.25, d: 150 }, { f: 523.25, d: 150 }, { f: 440, d: 350 }
+2477|    ],
+2478|    naves: [
+2479|      { f: 261.63, d: 120 }, { f: 329.63, d: 120 }, { f: 392, d: 120 }, { f: 523.25, d: 180 },
+2480|      { f: 466.16, d: 140 }, { f: 392, d: 140 }, { f: 349.23, d: 140 }, { f: 261.63, d: 300 }
+2481|    ],
+2482|    gameboy: [
+2483|      { f: 329.63, d: 130 }, { f: 493.88, d: 130 }, { f: 523.25, d: 130 }, { f: 587.33, d: 200 },
+2484|      { f: 523.25, d: 130 }, { f: 493.88, d: 130 }, { f: 440, d: 300 }
+2485|    ]
+2486|  };
+2487|  const tune = tunes[melodyType] || tunes.cyber;
+2488|  let delay = 0;
+2489|  tune.forEach(function(step){
+2490|    setTimeout(function(){ playSynthNote(step.f); }, delay);
+2491|    delay += step.d;
+2492|  });
+2493|  spawnToast('🎶 Playing ' + melodyType.toUpperCase() + ' demo groove!');
+2494|}
+2495|
+2496|function startSynthScope(){
+2497|  const cv = document.getElementById('synthScopeCanvas');
+2498|  if(!cv) return;
+2499|  const ctx = cv.getContext('2d');
+2500|  let phase = 0;
+2501|  function draw(){
+2502|    if(!document.getElementById('synthScopeCanvas')){
+2503|      cancelAnimationFrame(synthScopeAnim);
+2504|      return;
+2505|    }
+2506|    ctx.fillStyle = 'rgba(11, 13, 23, 0.25)';
+2507|    ctx.fillRect(0, 0, cv.width, cv.height);
+2508|
+2509|    // Grid
+2510|    ctx.strokeStyle = '#1e293b';
+2511|    ctx.lineWidth = 1;
+2512|    ctx.beginPath();
+2513|    ctx.moveTo(0, cv.height/2); ctx.lineTo(cv.width, cv.height/2);
+2514|    ctx.moveTo(cv.width/2, 0); ctx.lineTo(cv.width/2, cv.height);
+2515|    ctx.stroke();
+2516|
+2517|    // Soundwave
+2518|    ctx.lineWidth = 2.5;
+2519|    ctx.strokeStyle = '#00d4ff';
+2520|    ctx.shadowColor = '#00d4ff';
+2521|    ctx.shadowBlur = 8;
+2723|const fakePages = {
+2724|  'arc://threats': {
+2725|    title: 'ARC Threats — Threat Dashboard',
+2726|    content: '<div class="fake-page"><div class="hero-img" style="background:linear-gradient(135deg,#ff2d55,#ff9500);">☣️</div><h1>ARC Threat Dashboard</h1><p>Last 24 hours: <b style="color:#ff2d55;">666 threats</b> neutralized by the system.</p><p><b>Top threats:</b></p><ul style="margin-left:20px; color:#cbd5e1;"><li>🦠 arc_meme_stealer.exe — CRITICAL</li><li>🐴 groovy_trojan.dll — HIGH</li><li>🪱 worm_red_arc.sys — CRITICAL</li><li>🔒 ransomware_meme.bat — CRITICAL</li><li>⌨️ keylogger_arc.dll — HIGH</li><li>🎵 adware_reggaeton.exe — MEDIUM</li></ul><p style="margin-top:20px;">System status: <b style="color:#10b981;">PROTECTED</b></p></div>'
+2727|  },
+2728|  'arc://about': {
+2729|    title: 'About ARC Browser',
+2730|    content: '<div class="fake-page"><div class="hero-img" style="background:linear-gradient(135deg,#00d4ff,#a855f7);">🌐</div><h1>ARC Browser v3.0 Pro</h1><p>The official next-generation browser of the ARC Network. Designed to surf the Web3 meme deep web in style.</p><p><b>Features:</b></p><ul style="margin-left:20px; color:#cbd5e1;"><li>🪐 Spaces Navigation (Core, Synth Lab, Meme Store)</li><li>🎹 ARC Synth Lab (8-Bit Chiptune Synth + Oscilloscope)</li><li>🛍️ Interactive Meme Collection Store</li><li>⌘K Quick Command Palette</li><li>🔒 Encrypted Antivirus Sandboxing</li><li>📱 100% Touch Responsive</li></ul><p style="margin-top:20px;">Developed by ARC AI. All rights reserved.</p></div>'
+2731|  },
+2732|  'arc://leaderboard': {
+2733|    title: 'ARC Top Pilots — Leaderboard',
+2734|    content: '<!-- dynamic: leaderboard -->'
+2735|  },
+2736|  'arc://wallet': {
+2737|    title: 'ARC Wallet — My Portfolio',
+2738|    content: '<!-- dynamic: wallet -->'
+2739|  },
+2740|  'arc://network': {
+2741|    title: 'ARC Network Status',
+2742|    content: '<!-- dynamic: network -->'
+2743|  },
+2744|  'arc://news': {
+2745|    title: 'ARC News Feed',
+2746|    content: '<!-- dynamic: news -->'
+2747|  },
+2748|  'arc://games': {
+2749|    title: 'ARC Games Launcher',
+2750|    content: '<!-- dynamic: games -->'
+2751|  }
+2752|};
+2753|
+2754|const searchResults = {
+2755|  'konami': [{title:'Konami Code Activated',url:'arc://easter-egg',desc:'↑↑↓↓←→←→BA — Rainbow mode activated for 5 seconds. Enjoy the show!'}],
+2756|  'arc': [{title:'Final Boss Coordinates',url:'arc://boss-coords',desc:'Phase 1: blade fans. Phase 2: spinning spiral. Phase 3 (ENRAGE): 8-way bullet-hell. Weakness: penetrating laser in phase 2.'}],
+2757|  'piper': [{title:'Piper.meme — Official Store',url:'piper.meme',desc:'The official meme store of the ARC Network. Collect Pingu, Pug Galaxys, Shitcoin Lovers, and Tick.'}],
+2758|  'synth': [{title:'ARC Synth Lab — Chiptune Synthesizer',url:'arc://synth',desc:'Play 8-bit retro audio, chiptunes, and oscilloscope waveforms live in ARC Browser.'}],
+2759|  'piano': [{title:'ARC Synth Lab — Piano & Audio Engine',url:'arc://synth',desc:'Play retro melodies using your keyboard or touch screen.'}],
+2760|  'music': [{title:'ARC Synth Lab — 8-Bit Beats',url:'arc://synth',desc:'Create cyber soundscapes with square, sawtooth, and triangle waves.'}],
+2761|  'virus': [{title:'VirusARC — Official Antivirus',url:'antivirusarc.meme',desc:'The most powerful meme antivirus on the net. 500 million tokens protected. Your system is under the ARC shield.'}],
+2762|  'meme': [{title:'ARC Network Memes',url:'piper.meme',desc:'Official collection: Pingu, Pug Galaxys, Shitcoin Lovers, and Tick.'}],
+2763|  'leaderboard': [{title:'ARC Top Pilots Leaderboard',url:'arc://leaderboard',desc:'See the all-time champion pilots and this week\'s top scorers.'}],
+2764|  'wallet': [{title:'My ARC Wallet',url:'arc://wallet',desc:'Check your ARC, USDC, and PIPER token balances.'}],
+2765|  'network': [{title:'ARC Network Status',url:'arc://network',desc:'Live network nodes, blocks, and latency stats.'}],
+2766|  'news': [{title:'ARC News Feed',url:'arc://news',desc:'Latest updates from the ARC Network and meme ecosystem.'}],
+2767|  'games': [{title:'ARC Games Launcher',url:'arc://games',desc:'Play naves.exe, Minesweeper, Spider Solitaire, and Space Pinball.'}],
+2768|  'forum': [{title:'ARC Forum — Public Channel',url:'arc://forum',desc:'Talk with other pilots. Immutable records: written is written forever.'}]
+2769|};
+2770|
+2771|function renderTabs(){
+2772|  const bar = document.getElementById('browserTabbar');
+2773|  if(!bar) return;
+2774|  bar.innerHTML = '';
+2775|  browserTabs.forEach(function(tab){
+2776|    const el = document.createElement('div');
+2777|    el.className = 'browser-tab' + (tab.id === activeTabId ? ' active' : '');
+2778|    el.innerHTML = '<span class="tab-fav">'+tab.favicon+'</span><span class="tab-title">'+tab.title+'</span><span class="tab-close" data-id="'+tab.id+'">✕</span>';
+2779|    el.addEventListener('click', function(e){
+2780|      if(e.target.classList.contains('tab-close')){
+2781|        e.stopPropagation();
+2782|        closeTab(tab.id);
+2838|/** Enrutador del ARC Browser: arc://* internos, dominios → tarjeta de apertura, texto → búsqueda simulada. */
+2839|function loadUrl(url, addToHistory){
+2840|  const tab = browserTabs.find(function(t){ return t.id === activeTabId; });
+2841|  if(!tab) return;
+2842|
+2843|  if(addToHistory !== false){
+2844|    tab.history = tab.history.slice(0, tab.historyIdx + 1);
+2845|    tab.history.push(url);
+2846|    tab.historyIdx = tab.history.length - 1;
+2847|  }
+2848|  tab.url = url;
+2849|
+2850|  const content = document.getElementById('browserContent');
+2851|  if(content){
+2852|    content.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:14px;"><div class="loading-spinner"></div><div style="color:#64748b;font-size:13px;font-family:Inter,sans-serif;">Loading...</div></div>';
+2853|    // Inject loading bar
+2854|    let lb = document.getElementById('browserLoadingBar');
+2855|    if(!lb){
+2856|      lb = document.createElement('div');
+2857|      lb.id = 'browserLoadingBar';
+2858|      lb.className = 'browser-loading';
+2859|      content.parentNode.insertBefore(lb, content);
+2860|    }
+2861|    lb.style.display = 'block';
+2862|    setTimeout(function(){ if(lb) lb.style.display = 'none'; }, 800);
+2863|  }
+2864|
+2865|  setTimeout(function(){
+2866|    document.querySelectorAll('.space-btn').forEach(function(b){ b.classList.remove('active'); });
+2867|    if(url === 'arc://synth' || url === 'arc://swap'){
+2868|      const sp = document.getElementById('sp-synth'); if(sp) sp.classList.add('active');
+2869|      tab.title = 'ARC Synth Lab';
+2870|      tab.favicon = '🎹';
+2871|      if(content) content.innerHTML = renderSwapPage();
+2872|    } else if(url === 'piper.meme'){
+2873|      const sp = document.getElementById('sp-shop'); if(sp) sp.classList.add('active');
+2874|      tab.title = 'Piper.meme — Official Store';
+2875|      tab.favicon = '🛍️';
+2876|      if(content) content.innerHTML = renderMemeStorePage();
+2877|    } else if(url === 'arc://leaderboard'){
+2878|      const sp = document.getElementById('sp-core'); if(sp) sp.classList.add('active');
+2879|      tab.title = 'ARC Top Pilots';
+2880|      tab.favicon = '🏆';
+2881|      if(content) content.innerHTML = renderLeaderboardPage();
+2882|    } else if(url === 'arc://wallet'){
+2883|      const sp = document.getElementById('sp-core'); if(sp) sp.classList.add('active');
+2884|      tab.title = 'ARC Wallet';
+2885|      tab.favicon = '💰';
+2886|      if(content) content.innerHTML = renderWalletPage();
+2887|    } else if(url === 'arc://network'){
+2888|      const sp = document.getElementById('sp-core'); if(sp) sp.classList.add('active');
+2889|      tab.title = 'ARC Network';
+2890|      tab.favicon = '🌐';
+2891|      if(content) content.innerHTML = renderNetworkPage();
+2892|    } else if(url === 'arc://news'){
+2893|      const sp = document.getElementById('sp-core'); if(sp) sp.classList.add('active');
+2894|      tab.title = 'ARC News';
+2895|      tab.favicon = '📰';
+2896|      if(content) content.innerHTML = renderNewsPage();
+2897|    } else if(url === 'arc://games'){
+2898|      const sp = document.getElementById('sp-core'); if(sp) sp.classList.add('active');
+2899|      tab.title = 'ARC Games';
+2900|      tab.favicon = '🎮';
+2901|      if(content) content.innerHTML = renderGamesPage();
+2902|    } else if(url === 'arc://forum'){
+2903|      const sp = document.getElementById('sp-core'); if(sp) sp.classList.add('active');
+2904|      tab.title = 'ARC Forum';
+2905|      tab.favicon = '💬';
+2906|      forumLoad();
+2907|    } else {
+2908|      const sp = document.getElementById('sp-core'); if(sp) sp.classList.add('active');
+2909|      if(url === 'arc://newtab'){
+2910|        tab.title = 'New Tab';
+2911|        tab.favicon = '🏠';
+2912|        renderHomePage();
+2913|      } else if(fakePages[url]){
+2914|        tab.title = fakePages[url].title;
+2915|        tab.favicon = '🌐';
+2916|        if(content) content.innerHTML = fakePages[url].content;
+2917|      } else {
+2918|        const trimmed = url.trim();
+2919|        // 1) Internal ARC keyword search takes priority
+2920|        const query = trimmed.toLowerCase();
+2921|        let results = [];
+2922|        for(const key in searchResults){
+2923|          if(query.includes(key)){ results = results.concat(searchResults[key]); }
+2924|        }
+2925|        const isDomainLike = !/\s/.test(trimmed) && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(trimmed);
+2926|        if(results.length > 0 && !isDomainLike){
+2927|          tab.title = trimmed + ' — ARC Search';
+2928|          tab.favicon = '🔍';
+2929|          renderSearchResults(trimmed, results);
+2930|        } else if(isDomainLike){
+2931|          // Looks like a real address — external open card (many sites block iframes)
+2932|          const safe = trimmed.replace(/[^a-z0-9.\-]/gi, '');
+2933|          const full = 'https://' + safe;
+2934|          tab.title = safe;
+2935|          tab.favicon = '🌐';
+2936|          if(content){
+2937|            content.innerHTML =
+2938|              '<div class="fake-page" style="text-align:center;">'+
+2939|              '<div class="hero-img" style="background:linear-gradient(135deg,#00d4ff,#0066cc);margin:0 auto 18px;">🌐</div>'+
+2940|              '<h1>'+safe+'</h1>'+
+2941|              '<p style="color:#94a3b8;font-family:Inter,sans-serif;font-size:13px;max-width:420px;margin:0 auto 20px;">This is a real website outside the ARC Network. ARC Browser can\'t embed it safely, but you can open it in a new browser tab.</p>'+
+2942|              '<button onclick="window.open(\''+full+'\',\'_blank\')" style="background:linear-gradient(90deg,#00d4ff,#0066cc);border:none;color:#fff;padding:14px 34px;border-radius:12px;font-size:16px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;">🔓 OPEN '+safe.toUpperCase()+' ↗</button>'+
+2943|              '<p style="margin-top:18px;"><a href="#" onclick="loadUrl(\'arc://newtab\',true);return false;" style="color:#00d4ff;font-size:12px;">← back to ARC home</a></p>'+
+2944|              '</div>';
+2945|          }
+2946|        } else {
+2947|          // Everything else is a SEARCH → fully simulated ARC results (no external exits)
+2948|          tab.title = '🔍 ' + trimmed.slice(0,40) + ' — ARC Search';
+2949|          tab.favicon = '🔍';
+2950|          if(content){
+2951|            const tema = esc(trimmed.slice(0,80)); // escaped: user input
+2952|            const fakeHits = [
+2953|              { t:'Arcpedia — "'+tema+'"', d:'Artículo verificado por la ARC Network sobre '+tema+'. Contenido certificado por 666 nodos.', u:'arc://wiki/'+encodeURIComponent(trimmed) },
+2954|              { t:tema.toUpperCase()+' en piper.meme', d:'La comunidad está hablando de '+tema+' en los foros oficiales del ecosistema.', u:'piper.meme' },
+2955|              { t:'Sector 7G Archives: '+tema, d:'Documentos desclasificados relacionados con '+tema+'. Nivel de amenaza: mínimo.', u:'arc://news' },
+2956|              { t:'ARC Marketplace — compra "'+tema+'"', d:'Ofertas y tokens relacionados con '+tema+'. Acepta pago en ARC, USDC y PIPER.', u:'piper.meme' }
+2957|            ];
+2958|            let rh = '<div class="fake-page"><h1 style="margin-bottom:4px;">🔍 Resultados ARC para "'+tema+'"</h1>'+
+2959|              '<p style="color:#64748b;font-size:12px;font-family:Inter,sans-serif;margin-bottom:20px;">~666 resultados certificados por la ARC Network (0.0042s)</p>';
+2960|            fakeHits.forEach(function(h){
+2961|              rh += '<div style="background:#252535;border:1px solid #3d3d4d;border-radius:12px;padding:14px 16px;margin-bottom:10px;">'+
+2962|                '<div style="color:#00d4ff;font-size:17px;font-family:VT323,monospace;">'+h.t+'</div>'+
+2963|                '<div style="color:#7cbb00;font-size:11px;font-family:VT323,monospace;margin:2px 0 6px;">🔒 '+h.u+'</div>'+
+2964|                '<div style="color:#94a3b8;font-size:12px;font-family:Inter,sans-serif;line-height:1.5;">'+h.d+'</div>'+
+2965|                '</div>';
+2966|            });
+2967|            rh += '<div style="text-align:center;margin-top:16px;"><button class="nv-glass" style="cursor:pointer;" onclick="loadUrl(\'arc://newtab\',true)">← Volver al inicio</button></div></div>';
+2968|            content.innerHTML = rh;
+2969|          }
+2970|        }
+2971|      }
+2972|    }
+2973|    renderTabs();
+2974|  }, 350);
+2975|}
+2977|function renderHomePage(){
+2978|  const content = document.getElementById('browserContent');
+2979|  if(!content) return;
+2980|
+2981|  // Live stats for home page
+2982|  const alltime = safeParse(localStorage.getItem('arc_alltime_records'), []);
+2983|  const weekly = safeParse(localStorage.getItem('arc_weekly_leaderboard'), []);
+2984|  const top3 = alltime.slice(0,3);
+2985|  const weeklyTop = weekly[0];
+2986|  const bestScore = alltime[0] ? alltime[0].score.toLocaleString() : '---';
+2987|  const weeklyLead = weeklyTop ? weeklyTop.name + ' (' + weeklyTop.score.toLocaleString() + ')' : 'No entries yet';
+2988|
+2989|  const arcNews = [
+2990|    { ic:'🚀', txt:'naves.exe v4.2 — New boss: THE INDUSTRIAL FACTORY', time:'2h ago' },
+2991|    { ic:'🎹', txt:'ARC Synth Lab: Play 8-bit chiptunes & cyber melodies', time:'3h ago' },
+2992|    { ic:'🏆', txt:'Weekly leaderboard resets every 7 days — fight for #1!', time:'12h ago' },
+2993|    { ic:'🦠', txt:'VirusARC neutralized 666 new threats this cycle', time:'1d ago' },
+2994|    { ic:'🛍️', txt:'New meme: TICK — Buy it and enter invincible mode', time:'2d ago' }
+2995|  ];
+2996|
+2997|  const top3HTML = top3.length === 0
+2998|    ? '<div style="color:#64748b;font-size:12px;font-family:Inter,sans-serif;">No records yet — play naves.exe!</div>'
+2999|    : top3.map(function(r,i){ return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #3d3d4d;">'+
+3000|        '<span style="font-size:14px;">'+(i===0?'🥇':i===1?'🥈':'🥉')+'</span>'+
+3001|        '<span style="color:#e2e8f0;font-family:Inter,sans-serif;font-size:12px;font-weight:600;">'+r.name+'</span>'+
+3002|        '<span style="margin-left:auto;color:#fbbf24;font-family:VT323,monospace;font-size:16px;">'+r.score.toLocaleString()+'</span>'+
+3003|        '</div>'; }).join('');
+3004|
+3005|  const newsHTML = arcNews.map(function(n){
+3006|    return '<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #2d2d3d;align-items:flex-start;">'+
+3007|      '<span style="font-size:18px;flex-shrink:0;">'+n.ic+'</span>'+
+3008|      '<div><div style="font-size:12px;color:#e2e8f0;font-family:Inter,sans-serif;line-height:1.4;">'+n.txt+'</div>'+
+3009|      '<div style="font-size:10px;color:#64748b;margin-top:2px;">'+n.time+'</div></div></div>';
+3010|  }).join('');
+3011|
+3012|  const pilotNameHome = (localStorage.getItem('arc_last_pilot')||'ROOKIE');
+3013|  const pilotRec = alltime.find(function(r){ return r.name === pilotNameHome; });
+3014|  const pilotStrip =
+3015|    '<div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:12px 0 4px;">'+
+3016|      '<span style="font-family:VT323,monospace;font-size:16px;color:#9fd4ff;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.3);border-radius:999px;padding:4px 16px;">👨‍🚀 '+pilotNameHome+'</span>'+
+3017|      '<span style="font-family:VT323,monospace;font-size:16px;color:#fbbf24;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.35);border-radius:999px;padding:4px 16px;">🏅 '+(pilotRec ? pilotRec.score.toLocaleString() : 'NO RECORD YET')+'</span>'+
+3018|      '<span style="font-family:VT323,monospace;font-size:16px;color:#7cbb00;background:rgba(124,187,0,.08);border:1px solid rgba(124,187,0,.35);border-radius:999px;padding:4px 16px;">🪙 '+userWallet.ARC.toLocaleString()+' ARC</span>'+
+3019|    '</div>';
+3020|
+3021|  content.innerHTML =
+3022|    '<div class="home-page">' +
+3023|    '<div class="home-logo"><span>A</span><span>R</span><span>C</span></div>' +
+3024|    pilotStrip +
+3025|    '<div class="home-search"><span class="search-icon">🔍</span><input type="text" id="homeSearchInput" placeholder="Search the ARC Network or enter an arc:// URL" spellcheck="false"><span class="mic-icon" title="ARC Search">🌐</span></div>' +
+3026|    '<div class="home-tiles">' +
+3027|      '<div class="home-tile" data-url="arc://synth"><div class="tile-icon">🎹</div><div class="tile-name">ARC Synth Lab</div></div>' +
+3028|      '<div class="home-tile" data-url="piper.meme"><div class="tile-icon">🛍️</div><div class="tile-name">Meme Store</div></div>' +
+3029|      '<div class="home-tile" data-url="arc://leaderboard"><div class="tile-icon">🏆</div><div class="tile-name">Leaderboard</div></div>' +
+3030|      '<div class="home-tile" data-url="arc://wallet"><div class="tile-icon">💰</div><div class="tile-name">My Wallet</div></div>' +
+3031|      '<div class="home-tile" data-url="arc://games"><div class="tile-icon">🎮</div><div class="tile-name">Games</div></div>' +
+3032|      '<div class="home-tile" data-url="arc://network"><div class="tile-icon">🌐</div><div class="tile-name">Network</div></div>' +
+3033|      '<div class="home-tile" data-url="arc://news"><div class="tile-icon">📰</div><div class="tile-name">ARC News</div></div>' +
+3034|      '<div class="home-tile" data-url="arc://forum"><div class="tile-icon">💬</div><div class="tile-name">ARC Forum</div></div>' +
+3035|      '<div class="home-tile" data-url="arc://threats"><div class="tile-icon">☣️</div><div class="tile-name">Threats</div></div>' +
+3036|    '</div>' +
+3037|    '<div class="arc-news-block" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:580px;width:100%;margin-top:20px;">'+
+3038|    '<div style="background:#252535;border:1px solid #3d3d4d;border-radius:14px;padding:14px;">'+
+3039|    '<div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-family:Inter,sans-serif;">🏆 Top Pilots</div>'+
+3040|    top3HTML+
+3041|    '<div style="margin-top:8px;"><span class="home-tile" data-url="arc://leaderboard" style="display:inline-block;padding:4px 10px;border-radius:8px;font-size:11px;color:#00d4ff;border:1px solid #00d4ff;cursor:pointer;">View Full Board</span></div>'+
+3042|    '</div>'+
+3043|    '<div style="background:#252535;border:1px solid #3d3d4d;border-radius:14px;padding:14px;overflow:hidden;">'+
+3044|    '<div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-family:Inter,sans-serif;">📰 ARC News</div>'+
+3045|    newsHTML+
+3046|    '</div>'+
+3047|    '</div>'+
+3048|    '</div>';
+3049|
+3050|  const searchInput = document.getElementById('homeSearchInput');
+3051|  if(searchInput){
+3052|    searchInput.addEventListener('keydown', function(e){
+3053|      if(e.key === 'Enter' && this.value.trim()){
+3054|        loadUrl(this.value.trim(), true);
+3055|      }
+3056|    });
+3057|  }
+3058|
+3059|  content.querySelectorAll('[data-url]').forEach(function(tile){
+3060|    tile.addEventListener('click', function(){
+3061|      const u = this.dataset.url;
+3062|      if(u) loadUrl(u, true);
+3063|    });
+3064|  });
+3065|}
+3066|
+3067|function renderSearchResults(query, results){
+3068|  const content = document.getElementById('browserContent');
+3069|  if(!content) return;
+3070|  let html = '<div class="results-page"><div class="results-header">Results for "'+query+'" — '+results.length+' found</div>';
+3071|  results.forEach(function(r){
+3072|    html += '<div class="result-item"><div class="result-url">'+r.url+'</div><div class="result-title" data-url="'+r.url+'">'+r.title+'</div><div class="result-desc">'+r.desc+'</div></div>';
+3073|  });
+3074|  html += '<div class="result-item" style="margin-top:14px;background:rgba(0,212,255,0.05);border:1px solid #3d3d4d;border-radius:8px;padding:10px;"><div class="result-url">arc://network</div><div class="result-title" data-url="arc://network">🌐 More about &quot;'+query+'&quot; on the ARC Network</div><div class="result-desc">ARC Browser keeps everything inside the simulated ARC Network.</div></div>';
+3075|  html += '</div>';
+3076|  content.innerHTML = html;
+3077|  content.querySelectorAll('.result-title').forEach(function(el){
+3078|    el.addEventListener('click', function(){
+3079|      const url = this.dataset.url;
+3080|      const ext = this.dataset.ext;
+3081|      if(ext){
+3082|        loadUrl(decodeURIComponent(ext), true);
+3083|      } else if(url){
+3084|        loadUrl(url, true);
+3085|      }
+3086|    });
+3087|  });
+3088|}
+3089|
+3090|/* ---------- ARC PAGE RENDERERS ---------- */
+3091|function renderLeaderboardPage(){
+3092|  const alltime = safeParse(localStorage.getItem('arc_alltime_records'), []);
+3093|  const weekly = safeParse(localStorage.getItem('arc_weekly_leaderboard'), []);
+3094|  let html = '<div class="fake-page"><div class="hero-img" style="background:linear-gradient(135deg,#fbbf24,#f59e0b);">🏆</div>';
+3095|  html += '<h1>ARC Top Pilots</h1>';
+3096|  html += '<p style="color:#94a3b8;font-family:Inter,sans-serif;font-size:13px;margin-bottom:18px;">Permanent Hall of Fame records. Each pilot occupies at most one spot.</p>';
+3097|  html += '<h2 style="color:#fbbf24;font-size:18px;font-family:VT323,monospace;letter-spacing:2px;margin-bottom:8px;">🏅 ALL-TIME RECORDS</h2>';
+3098|  if(alltime.length === 0){
+3099|    html += '<p style="color:#64748b;">No records yet. Play naves.exe and make history!</p>';
+3100|  } else {
+3101|    html += '<table style="width:100%;border-collapse:collapse;font-family:VT323,monospace;font-size:17px;">';
+3102|    html += '<tr><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">#</th><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">Pilot</th><th style="color:#00d4ff;text-align:right;padding:6px 8px;border-bottom:2px solid #00d4ff;">Score</th><th style="color:#00d4ff;text-align:center;padding:6px 8px;border-bottom:2px solid #00d4ff;">Sector</th></tr>';
+3103|    alltime.forEach(function(r, i){
+3104|      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';  
+3105|      html += '<tr style="border-bottom:1px solid rgba(0,212,255,0.12);"><td style="padding:5px 8px;color:#fbbf24;">'+(i+1)+medal+'</td><td style="padding:5px 8px;color:#e2e8f0;">'+r.name+'</td><td style="padding:5px 8px;text-align:right;color:#7cbb00;">'+r.score.toLocaleString()+'</td><td style="padding:5px 8px;text-align:center;color:#9fd4ff;">'+(r.round||'-')+'</td></tr>';
+3106|    });
+3232|    top3HTML+
+3233|    '<div style="margin-top:8px;"><span class="home-tile" data-url="arc://leaderboard" style="display:inline-block;padding:4px 10px;border-radius:8px;font-size:11px;color:#00d4ff;border:1px solid #00d4ff;cursor:pointer;">View Full Board</span></div>'+
+3234|    '</div>'+
+3235|    '<div style="background:#252535;border:1px solid #3d3d4d;border-radius:14px;padding:14px;overflow:hidden;">'+
+3236|    '<div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-family:Inter,sans-serif;">📰 ARC News</div>'+
+3237|    newsHTML+
+3238|    '</div>'+
+3239|    '</div>'+
+3240|    '</div>';
+3241|
+3242|  const searchInput = document.getElementById('homeSearchInput');
+3243|  if(searchInput){
+3244|    searchInput.addEventListener('keydown', function(e){
+3245|      if(e.key === 'Enter' && this.value.trim()){
+3246|        loadUrl(this.value.trim(), true);
+3247|      }
+3248|    });
+3249|  }
+3250|
+3251|  content.querySelectorAll('[data-url]').forEach(function(tile){
+3252|    tile.addEventListener('click', function(){
+3253|      const u = this.dataset.url;
+3254|      if(u) loadUrl(u, true);
+3255|    });
+3256|  });
+3257|}
+3258|
+3259|function renderSearchResults(query, results){
+3260|  const content = document.getElementById('browserContent');
+3261|  if(!content) return;
+3262|  // Seguridad: `query` viene del input del usuario (barra de direcciones / palette).
+3263|  // Sin escapar, un texto como <img src=x onerror=...> se ejecutaría en la página.
+3264|  const q = esc(query);
+3265|  let html = '<div class="results-page"><div class="results-header">Results for "'+q+'" — '+results.length+' found</div>';
+3266|  results.forEach(function(r){
+3267|    html += '<div class="result-item"><div class="result-url">'+esc(r.url)+'</div><div class="result-title" data-url="'+esc(r.url)+'">'+esc(r.title)+'</div><div class="result-desc">'+esc(r.desc)+'</div></div>';
+3268|  });
+3269|  html += '<div class="result-item" style="margin-top:14px;background:rgba(0,212,255,0.05);border:1px solid #3d3d4d;border-radius:8px;padding:10px;"><div class="result-url">arc://network</div><div class="result-title" data-url="arc://network">🌐 More about &quot;'+q+'&quot; on the ARC Network</div><div class="result-desc">ARC Browser keeps everything inside the simulated ARC Network.</div></div>';
+3270|  html += '</div>';
+3271|  content.innerHTML = html;
+3286|function renderLeaderboardPage(){
+3287|  const alltime = safeParse(localStorage.getItem('arc_alltime_records'), []);
+3288|  const weekly = safeParse(localStorage.getItem('arc_weekly_leaderboard'), []);
+3289|  let html = '<div class="fake-page"><div class="hero-img" style="background:linear-gradient(135deg,#fbbf24,#f59e0b);">🏆</div>';
+3290|  html += '<h1>ARC Top Pilots</h1>';
+3291|  html += '<p style="color:#94a3b8;font-family:Inter,sans-serif;font-size:13px;margin-bottom:18px;">Permanent Hall of Fame records. Each pilot occupies at most one spot.</p>';
+3292|  html += '<h2 style="color:#fbbf24;font-size:18px;font-family:VT323,monospace;letter-spacing:2px;margin-bottom:8px;">🏅 ALL-TIME RECORDS</h2>';
+3293|  if(alltime.length === 0){
+3294|    html += '<p style="color:#64748b;">No records yet. Play Ships.exe and make history!</p>';
+3295|  } else {
+3296|    html += '<table style="width:100%;border-collapse:collapse;font-family:VT323,monospace;font-size:17px;">';
+3297|    html += '<tr><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">#</th><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">Pilot</th><th style="color:#00d4ff;text-align:right;padding:6px 8px;border-bottom:2px solid #00d4ff;">Score</th><th style="color:#00d4ff;text-align:center;padding:6px 8px;border-bottom:2px solid #00d4ff;">Sector</th></tr>';
+3298|    alltime.forEach(function(r, i){
+3299|      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';  
+3300|      html += '<tr style="border-bottom:1px solid rgba(0,212,255,0.12);"><td style="padding:5px 8px;color:#fbbf24;">'+(i+1)+medal+'</td><td style="padding:5px 8px;color:#e2e8f0;">'+r.name+'</td><td style="padding:5px 8px;text-align:right;color:#7cbb00;">'+r.score.toLocaleString()+'</td><td style="padding:5px 8px;text-align:center;color:#9fd4ff;">'+(r.round||'-')+'</td></tr>';
+3301|    });
+3302|    html += '</table>';
+3303|  }
+3304|  html += '<h2 style="color:#fbbf24;font-size:18px;font-family:VT323,monospace;letter-spacing:2px;margin:22px 0 8px;">📅 WEEKLY RECORDS</h2>';
+3305|  if(weekly.length === 0){
+3306|    html += '<p style="color:#64748b;">No weekly records yet.</p>';
+3307|  } else {
+3308|    html += '<table style="width:100%;border-collapse:collapse;font-family:VT323,monospace;font-size:17px;">';
+3309|    html += '<tr><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">#</th><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">Pilot</th><th style="color:#00d4ff;text-align:right;padding:6px 8px;border-bottom:2px solid #00d4ff;">Score</th></tr>';
+3310|    weekly.forEach(function(r, i){
+3311|      html += '<tr style="border-bottom:1px solid rgba(0,212,255,0.12);"><td style="padding:5px 8px;color:#fbbf24;">'+(i+1)+'</td><td style="padding:5px 8px;color:#e2e8f0;">'+r.name+'</td><td style="padding:5px 8px;text-align:right;color:#7cbb00;">'+r.score.toLocaleString()+'</td></tr>';
+3312|    });
+3313|    html += '</table>';
+3314|  }
+3315|  html += '</div>';
+3316|  return html;
+3317|}
+3318|
+3319|function renderWalletPage(){
+3320|  const w = userWallet;
+3321|  const html = '<div class="fake-page">' +
+3322|    '<div class="hero-img" style="background:linear-gradient(135deg,#fbbf24,#f59e0b);">💰</div>' +
+3395|  if(!modal) return;
+3396|  const isShow = typeof force === 'boolean' ? force : !modal.classList.contains('show');
+3397|  if(isShow){
+3398|    modal.classList.add('show');
+3399|    const inp = document.getElementById('arcCmdInput');
+3400|    if(inp){ inp.value = ''; inp.focus(); }
+3401|    filterArcCmd('');
+3402|  } else {
+3403|    modal.classList.remove('show');
+3404|  }
+3405|}
+3406|
+3407|function filterArcCmd(q){
+3408|  const query = (q||'').toLowerCase().trim();
+3409|  const list = document.getElementById('arcCmdList');
+3410|  if(!list) return;
+3411|  const matches = arcCommands.filter(function(c){
+3412|    return !query || c.title.toLowerCase().includes(query) || c.cat.toLowerCase().includes(query);
+3413|  });
+3414|  list.innerHTML = '';
+3415|  if(matches.length === 0){
+3416|    list.innerHTML = '<div style="padding:16px;text-align:center;color:#64748b;font-size:13px;">No commands matching "'+esc(q)+'"</div>';
+3417|    return;
+3418|  }
+3419|  matches.forEach(function(cmd, idx){
+3420|    const item = document.createElement('div');
+3421|    item.className = 'arc-cmd-item' + (idx === 0 ? ' sel' : '');
+3422|    item.innerHTML = '<span class="cmd-ic">'+cmd.ic+'</span><span style="font-weight:600;">'+cmd.title+'</span><span class="cmd-badge">'+cmd.cat+'</span>';
+3423|    item.addEventListener('click', function(){
+3424|      toggleArcCmd(false);
+3425|      cmd.run();
+3426|    });
+3427|    list.appendChild(item);
+3428|  });
+3429|}
+3430|
+3431|// Touch Desktop Single-Tap Handler
+3432|function initMobileTouchIcons(){
+3433|  document.querySelectorAll('.dicon').forEach(function(icon){
+3434|    icon.addEventListener('click', function(e){
+3435|      if(window.innerWidth <= 768 || ('ontouchstart' in window)){
+3436|        const dbl = icon.getAttribute('ondblclick');
+3437|        if(dbl){
+3438|          try { new Function(dbl)(); } catch(err){}
+3439|        }
+3440|      }
+3441|    });
+3442|  });
+3443|}
+3444|
+3445|window.addEventListener('keydown', function(e){
+3446|  if((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')){
+3447|    e.preventDefault();
+3448|    toggleArcCmd();
+3449|  }
+3450|  if(e.key === 'Escape'){
+3451|    const modal = document.getElementById('arcCmdModal');
+3452|    if(modal && modal.classList.contains('show')) toggleArcCmd(false);
+3453|  }
+3454|});
+3455|    const modal = document.getElementById('arcCmdModal');
+3495|
+3496|// Initialize browser
+3497|renderTabs();
+3498|renderHomePage();
+3499|initMobileTouchIcons();
+3500|
+3501|/* ============ POWER-UPS & CRYPTO ABILITIES ============ */
+3502|function powerUpColor(t){
+3503|  return {
+3504|    piper: '#7cbb00',
+3505|    circle: '#ffffff',
+3506|    usdc: '#2775ca',
+3507|    E: '#00d4ff',
+3508|    '+': '#ff2d55',
+3520|/* ============ NAVES GAME LOOP ============ */
+3521|let lastFrameTime = 0;
+3522|function nvLoop(timestamp){
+3523|  requestAnimationFrame(nvLoop);
+3524|  if(!NV.on)return;
+3525|  
+3526|  if(!lastFrameTime) lastFrameTime = timestamp;
+3527|  const dt = timestamp - lastFrameTime;
+3528|  lastFrameTime = timestamp;
+3529|  if(dt > 100) return;
+3530|  const dtScale = Math.min(Math.max(dt / 16.667, 0.4), 2.2);
+3531|
+3532|  // === ADAPTIVE FPS QUALITY ===
+3533|  nvFpsFrames++;
+3534|  if(timestamp - nvFpsLast > 1000){
+3535|    nvFpsAvg = nvFpsFrames;
+3536|    nvFpsFrames = 0;
+3537|    nvFpsLast = timestamp;
+3538|    nvLowPerf = nvFpsAvg < 45;
+3539|    // Adapt resolution gradually to avoid visible oscillation. Recover only
+3540|    // after sustained headroom, so a busy bullet-hell scene remains stable.
+3541|    if(nvFpsAvg < 42 && nvRenderScale > NV_MIN_SCALE){
+3542|      // Hysteresis: drop fast, the same call also refits the spatial grid/atlas pools
+3543|      nvApplyRenderScale(nvRenderScale - 0.1);
+3544|      initSpatialGrid(innerWidth, innerHeight);
+3545|    } else if(nvFpsAvg > 57 && nvRenderScale < (isMobile ? 0.86 : 1.0)){
+3546|      nvApplyRenderScale(nvRenderScale + 0.04);
+3547|      initSpatialGrid(innerWidth, innerHeight);
+3548|    }
+3549|    // Drop the scrolling star-field's binary rain entirely under heavy load
+3550|    NV.hideBgFx = nvFpsAvg < 30;
+3551|  }
+3552|  
+3553|  const W=innerWidth,H=innerHeight, d=NV.diff;
+3554|  // Render in logical screen coordinates, mapped to the reduced backing
+3555|  // buffer. CSS stretches it back to the viewport with smoothing enabled.
+3556|  nvCtx.setTransform(nvRenderScale,0,0,nvRenderScale,0,0);
+3557|  nvCtx.clearRect(0,0,W,H); nvCtx.fillStyle='#000'; nvCtx.fillRect(0,0,W,H);
+3558|
+3559|
+3640|    item.innerHTML = '<span class="cmd-ic">'+cmd.ic+'</span><span style="font-weight:600;">'+cmd.title+'</span><span class="cmd-badge">'+cmd.cat+'</span>';
+3641|    item.addEventListener('click', function(){
+3642|      toggleArcCmd(false);
+3643|      cmd.run();
+3644|    });
+3645|    list.appendChild(item);
+3646|  });
+3647|}
+3648|
+3649|/* ============ TAP TÁCTIL → CLICK (sintetizador global) ============
+3650|   Problema de fondo: en móvil el navegador NO siempre emite el 'click' sintético
+3651|   después de un tap. Lo descarta cuando el gesto es ambiguo (scroll, doble-tap
+3652|   zoom, gesto capturado por un padre). Toda la interfaz está cableada con
+3653|   onclick/ondblclick (105 en el HTML + 27 generados), así que en el celular
+3654|   fallaban los botones de las ventanas, el menú inicio y los del juego
+3655|   (START MISSION, RANKINGS, BRIEFING, EXIT…).
+3656|
+3657|   En vez de enganchar manejadores elemento por elemento (frágil: cualquier
+3658|   botón nuevo volvería a fallar), se sintetiza un 'click' real desde el tap.
+3659|   Así funcionan TODOS los onclick/ondblclick existentes y los futuros, sin
+3660|   tocar el código de cada botón.
+3661|
+3662|   Reglas:
+3663|   - Solo actúa en interfaz táctil/estrecha; en escritorio no interviene.
+3664|   - Si el dedo se desplaza > 10 px, era scroll: se ignora.
+3665|   - Si el navegador canceló el gesto (está haciendo scroll), se ignora.
+3666|   - Si un manejador anterior hizo preventDefault (joystick del juego, botones
+3667|     de habilidad), su click ya está gestionado: no se duplica.
+3668|   - Anti-duplicado de 400 ms por si el navegador SÍ emite el click nativo.
+3669|   - No se sintetiza sobre campos de texto: un click sintético les quitaría el
+3670|      cmd.run();
+3671|    });
+3672|    list.appendChild(item);
+3673|  });
+3674|}
+3675|
+3676|/* ============ APERTURA DE ICONOS EN PANTALLA TÁCTIL ============
+3677|   Antes esto escuchaba 'click', pero en navegadores móviles el tap NO siempre
+3678|   emite click: en un dispositivo táctil se emiten pointerdown/pointerup y
+3679|   touchstart/touchend, y si el navegador considera el gesto ambiguo (scroll,
+3680|   doble-tap-zoom, gesto del padre) el click sintético nunca llega. Resultado:
+3681|   en el celular se tocaba "Games"/"Ships.exe" y no abría nada.
+3682|   Solución: responder a los eventos táctiles reales, con guardas para no
+3683|   duplicar el disparo cuando el click sí se emite, y para no robarle el gesto
+3684|   al arrastre de iconos en escritorio. */
+3685|function initMobileTouchIcons(){
+3686|  let lastOpen = 0;                 // anti doble disparo (touch + click)
+3687|  function runIconAction(icon){
+3688|    const dbl = icon.getAttribute('ondblclick');
+3689|    if(!dbl) return;
+3690|    const now = Date.now();
+3691|    if(now - lastOpen < 450) return;
+3692|    lastOpen = now;
+3693|    runIconActionString(dbl);
+3694|  }
+3695|  function isTouchUI(){
+3696|    return window.innerWidth <= 768 || isTouch || ('ontouchstart' in window && window.innerWidth <= 1024);
+3697|  }
+3698|  // Delegación en fase de captura: aplica también a iconos creados después.
+3699|  ['touchend','pointerup'].forEach(function(evName){
+3700|    document.addEventListener(evName, function(e){
+3701|      if(!isTouchUI()) return;
+3702|      if(evName === 'pointerup' && e.pointerType === 'mouse') return; // el ratón usa click/dblclick nativos
+3703|      const icon = e.target.closest && e.target.closest('.dicon');
+3704|      if(!icon) return;
+3705|      if(icon.dataset.dragged === '1'){ icon.dataset.dragged = '0'; return; } // fue un arrastre, no un tap
+3706|      runIconAction(icon);
+3707|    }, true);
+3708|  });
+3709|  // Respaldo para navegadores de escritorio con pantalla estrecha (click normal).
+3710|  document.addEventListener('click', function(e){
+3711|    if(!isTouchUI()) return;
+3712|    const icon = e.target.closest && e.target.closest('.dicon');
+3713|    if(!icon) return;
+3714|    runIconAction(icon);
+3715|  }, true);
+3716|}
+3717|
+3718|window.addEventListener('keydown', function(e){
+3719|  if((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')){
+3720|    e.preventDefault();
+3721|    toggleArcCmd();
+3722|    if(!t) return;
+3723|    if(Math.abs(t.clientX - startX) > MAX_DRIFT || Math.abs(t.clientY - startY) > MAX_DRIFT) return;
+3724|    const target = e.target;
+3725|    if(!isTappable(target)) return;
+3726|    synthesize(target, t.clientX, t.clientY);
+3727|  }, { capture: true, passive: true });
+3728|
+3729|  // Los manejadores que hacen preventDefault marcan el gesto como gestionado.
+3730|renderTabs();
+3731|renderHomePage();
+3732|initMobileTouchIcons();
+3733|
+3734|/* ============ DOCK MÓVIL (lanzador siempre visible) ============
+3735|   En el celular los iconos del escritorio pueden quedar fuera de la primera
+3736|   pantalla y las ventanas ocupan todo el ancho, así que este dock replica los
+3737|   accesos principales. Se construye a partir de los .dicon para que exista una
+3738|   sola fuente de verdad: si mañana se añade un icono, se copia solo. */
+3739|function buildMobileDock(){
+3740|  const dock = document.getElementById('mobileDock');
+3741|  if(!dock) return;
+3742|  const picks = [
+3743|    { key:'VirusARC', icon:'🛡️' },
+3744|    { key:'Ships',    icon:'🚀', hot:true },
+3745|    { key:'ARC Browser', icon:'🌐' },
+3746|    { key:'Games',    icon:'🎮' },
+3747|    { key:'Memes',    icon:'📁' },
+3748|    { key:'README',   icon:'📄' }
+3749|  ];
+3750|  const icons = Array.from(document.querySelectorAll('.dicon'));
+3751|  const labels = icons.map(function(d){ const l=d.querySelector('.lbl'); return l ? l.textContent.trim() : ''; });
+3752|  dock.innerHTML = '';
+3753|  picks.forEach(function(p){
+3754|    const idx = labels.findIndex(function(l){ return l.indexOf(p.key) === 0; });
+3755|    if(idx < 0) return;
+3756|    const src = icons[idx];
+3757|    const action = src.getAttribute('ondblclick');
+3758|    if(!action) return;
+3759|    const btn = document.createElement('button');
+3760|        nvCtx.save(); nvCtx.translate(dr.x, dr.y);
+3761|        nvCtx.save(); nvCtx.globalCompositeOperation='lighter';
+3762|        const dg=nvCtx.createRadialGradient(0,0,0,0,0,16);
+3763|        dg.addColorStop(0,'rgba(0,212,255,.8)'); dg.addColorStop(1,'rgba(0,0,0,0)');
+3764|        nvCtx.fillStyle=dg; nvCtx.beginPath(); nvCtx.arc(0,0,16,0,7); nvCtx.fill(); nvCtx.restore();
+3765|        nvCtx.fillStyle='#ffffff'; nvCtx.shadowColor='#00d4ff'; nvCtx.shadowBlur=10;
+3766|        nvCtx.beginPath(); nvCtx.arc(0,0,5,0,7); nvCtx.fill();
+3767|        nvCtx.strokeStyle='#00d4ff'; nvCtx.lineWidth=2;
+3768|        nvCtx.beginPath(); nvCtx.arc(0,0,9,0,7); nvCtx.stroke();
+3769|        nvCtx.restore();
+3770|      });
+3771|    }
+3772|    if(NV.budget>0){ NV.squadCd--;
+3773|      if(NV.squadCd<=0){
+3774|        const isMob = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window) || (W < 768) || (H > W);
+3775|        NV.squadCd = isMob ? Math.max(16, Math.floor(46 - NV.round * 2.2)) : Math.max(26, 90 - NV.round * 3);
+3776|        const size=Math.min(NV.budget, 3+Math.floor(Math.random()*3)+Math.min(Math.floor(NV.round/4),3));
+3777|        NV.budget-=size; spawnSquad(); } }
+3778|    NV.astCd--;
+3779|    if(NV.astCd<=0){ NV.astCd=astrate*(0.7+Math.random()*.6);
+3780|      const r=14+Math.random()*20;
+3781|      const dir=Math.random()<.5?1:-1;
+3782|      NV.asteroids.push({x: dir>0? -40 : W+40, y:-30-Math.random()*H*.4,
+3783|        vx:dir*(0.7+Math.random()*1.5)*dm, vy:(0.8+Math.random()*1.4)*dm, r:r,
+3784|        rot:0,vr:(Math.random()-.5)*.09, hp:Math.ceil(r/10), vol:Math.random()<volp,
+3785|        verts:Array.from({length:9},function(){return .75+Math.random()*.4;})});
+3786|    }
+3787|    NV.groups.forEach(function(g){ g.y+=g.vy; g.sway+=.02; });
+3788|    // Purge dead squads too: a group with no living members is dead weight
+3789|    NV.groups=NV.groups.filter(function(g){
+3790|      if(g.y>=H+120) return false;
+3791|      for(let i=0;i<NV.enemies.length;i++){ if(NV.enemies[i].g===g) return true; }
+3792|      return false;
+3793|    });
+3794|    if(NV.bombT>0){
+3795|      NV.bombT--;
+3796|      const sweepY=(1-NV.bombT/70)*H;
+3797|      NV.ebullets=NV.ebullets.filter(function(b){ if(b.y<sweepY){ const p=getParticle(); if(p){ p.active=true; p.kind='fire'; p.x=b.x; p.y=b.y; p.vx=0; p.vy=-1; p.l=10; p.maxL=10; p.r=3; p.col='#7cbb00'; } return false; } return true; });
+3798|      for(let i=NV.enemies.length-1;i>=0;i--){ const e=NV.enemies[i];
+3799|        if(e.y<sweepY && e.type!=='camo'){ killEnemy(e,i,false); } }
+3808|  }, { capture: false, passive: true });
+3809|  document.addEventListener('touchend', function(e){
+3810|    if(e.defaultPrevented) suppressUntil = Date.now() + 600;
+3811|  }, { capture: false, passive: true });
+3812|
+3813|  // Registro de clicks: permite saber si el navegador ya entregó su propio click
+3814|  // (Android) y si el tap fue atendido. El click sintético se distingue con
+3815|  // syntheticInFlight para no contarlo como nativo.
+3816|  document.addEventListener('click', function(){
+3817|    clickHandledThisTap = true;
+3818|    if(!syntheticInFlight) clickSeenAt = Date.now();
+3819|  }, { capture: true, passive: true });
+3820|}
+3821|initGlobalTapToClick();
+4640|  }
+4641|
+4642|  for(let i=NV.asteroids.length-1;i>=0;i--){
+4643|    const a=NV.asteroids[i];
+4644|    if(playing&&!frozen){ a.x+=a.vx; a.y+=a.vy; a.rot+=a.vr;
+4645|      let astDead = false;
+4646|      querySpatialGrid(a.x, a.y, a.r + 16, function(item, type){
+4647|        if(astDead) return true;
+4648|        if(type === 'enemy'){
+4649|          const e = item;
+4650|          const idx = NV.enemies.indexOf(e);
+4651|          if(idx >= 0){
+4652|            killEnemy(e, idx, false);
+4653|            a.hp -= 1;
+4654|            sparks(a.x, a.y, 4, '#fbbf24');
+4655|            nvBoom(a.x, a.y, .5, 'rock');
+4656|            if(a.hp <= 0){
+4657|              astDead = true;
+4658|              if(a.vol) detonateAsteroid(a, i);
+4659|              else NV.asteroids.splice(i, 1);
+4660|              return true;
+4661|            }
+4662|          }
+4663|        }
+4664|        return false;
+4665|      });
+4666|      if(astDead) continue;
+4667|    }
+4668|    if(NV.asteroids[i]!==a) continue;
+4669|    nvCtx.save(); nvCtx.translate(a.x,a.y); nvCtx.rotate(a.rot);
+4670|    nvCtx.fillStyle='#8a867a'; nvCtx.strokeStyle='#55504a'; nvCtx.lineWidth=2;
+4671|    nvCtx.beginPath();
+4672|    a.verts.forEach(function(v,k){ const an=k/9*6.28,px=Math.cos(an)*a.r*v,py=Math.sin(an)*a.r*v; k?nvCtx.lineTo(px,py):nvCtx.moveTo(px,py); });
+4673|    nvCtx.closePath(); nvCtx.fill(); nvCtx.stroke();
+4674|    if(a.vol){ const pulse=(Math.sin(NV.t*.25)+1)/2;
+4675|      nvCtx.save(); nvCtx.globalCompositeOperation='lighter';
+4676|      nvCtx.fillStyle='rgba(255,45,60,'+(.35+pulse*.55)+')';
+4677|      nvCtx.beginPath(); nvCtx.arc(0,0,a.r*.42,0,7); nvCtx.fill(); nvCtx.restore(); }
+4678|    else { nvCtx.fillStyle='#6b665c'; nvCtx.beginPath(); nvCtx.arc(-a.r*.3,-a.r*.2,a.r*.22,0,7); nvCtx.fill(); }
+4679|    if(a.flash>0){ a.flash--; nvCtx.globalAlpha=.8; nvCtx.fillStyle='#fff';
+4680|      nvCtx.beginPath(); nvCtx.arc(0,0,a.r,0,7); nvCtx.fill(); nvCtx.globalAlpha=1; }
+4681|    nvCtx.restore();
+4682|    if(playing&&!frozen){
+4683|      let dead=false;
+4684|      querySpatialGrid(a.x, a.y, a.r+6, function(item, type){
+4685|        if(dead) return true;
+4686|        if(type==='bullet'){
+4687|          const b=item;
+4688|          if(b.active===false) return false;
+4689|          const bdx=b.x-a.x, bdy=b.y-a.y;
+4690|          if(Math.abs(bdx)<a.r+6 && Math.abs(bdy)<a.r+6 && (bdx*bdx+bdy*bdy)<a.r*a.r){
+4691|            b.active=false; a.hp--; a.flash=4; sparks(b.x,b.y,4,'#fbbf24');
+4692|            if(a.hp<=0){
+4693|              if(a.vol) detonateAsteroid(a,i);
+4694|              else {
+4695|                nvBoom(a.x,a.y,1,'rock'); nvDebris(a.x,a.y,2); addScore(50);
+4696|                if(a.r>22) for(let k=0;k<2;k++) NV.asteroids.push({x:a.x,y:a.y,vx:a.vx+(Math.random()-.5)*2,vy:a.vy*.9,r:a.r*.5,rot:0,vr:(Math.random()-.5)*.12,hp:1,vol:false,verts:a.verts});
+4697|                NV.asteroids.splice(i,1);
+4698|              }
+4699|              dead=true; return true;
+4700|            }
+4701|          }
+4702|        }
+4703|        return false;
+4704|      });
+4705|      if(dead)continue;
+4706|      if(p&&p.inv<=0&&!(NV.phaseT>0)&&Math.hypot(p.x-a.x,p.y-a.y)<a.r+16){ nvBoom(a.x,a.y,1.2,'rock'); NV.asteroids.splice(i,1); playerHit(); continue; }
+4707|      if(a.y>H+80||a.x<-120||a.x>W+120)NV.asteroids.splice(i,1);
+4708|    }
+4709|  }
+4718|      else drawEnemyBaseSprite(nvCtx, 'convoy');
+4719|      nvCtx.restore();
+4720|      nvCtx.save(); nvCtx.globalCompositeOperation='lighter';
+4721|      const bg2=nvCtx.createRadialGradient(0,0,6,0,0,34);
+4722|      bg2.addColorStop(0,'rgba(251,191,36,.35)'); bg2.addColorStop(1,'rgba(0,0,0,0)');
+4723|      nvCtx.fillStyle=bg2; nvCtx.beginPath(); nvCtx.arc(0,0,34,0,7); nvCtx.fill(); nvCtx.restore();
+4724|      if(e.hp < (e.maxHp||6)){
+4725|        nvCtx.shadowBlur=0; nvCtx.fillStyle='rgba(0,0,0,.7)'; nvCtx.fillRect(-20,-34,40,4);
+4726|        nvCtx.fillStyle='#fbbf24'; nvCtx.fillRect(-19,-33,38*(e.hp/(e.maxHp||6)),2);
+4727|      }
+4728|    } else {
+4729|      if(atlasTextures['enemy_hunt']) nvCtx.drawImage(atlasTextures['enemy_hunt'].cv,-45,-45);
+4730|      else drawEnemyBaseSprite(nvCtx, 'hunt');
+4731|    }
+4732|    if(e.flash>0){ nvCtx.globalAlpha=.85; nvCtx.fillStyle='#fff';
+4733|      nvCtx.beginPath(); nvCtx.ellipse(0,0,18,12,0,0,7); nvCtx.fill(); nvCtx.globalAlpha=1; }
+4734|    nvCtx.shadowBlur=0; nvCtx.restore();
+4735|    if(e.type==='camo' && e.st===2 && playing){
+4736|      nvCtx.save(); nvCtx.globalCompositeOperation='lighter';
+4737|      const jx=(Math.random()-.5)*3;
+4738|      let g=nvCtx.createLinearGradient(e.x-22+jx,0,e.x+22+jx,0);
+4739|      g.addColorStop(0,'rgba(168,85,247,0)'); g.addColorStop(.5,'rgba(168,85,247,.5)'); g.addColorStop(1,'rgba(168,85,247,0)');
+4740|      nvCtx.fillStyle=g; nvCtx.fillRect(e.x-22+jx,e.y,44,H-e.y);
+4741|      g=nvCtx.createLinearGradient(e.x-9+jx,0,e.x+9+jx,0);
+4742|      g.addColorStop(0,'rgba(220,150,255,0)'); g.addColorStop(.5,'rgba(230,180,255,.9)'); g.addColorStop(1,'rgba(220,150,255,0)');
+4743|      nvCtx.fillStyle=g; nvCtx.fillRect(e.x-9+jx,e.y,18,H-e.y);
+4744|      nvCtx.fillStyle='#fff'; nvCtx.fillRect(e.x-2.5+jx,e.y,5,H-e.y);
+4745|      nvCtx.restore();
+4746|    }
+4747|    if(playing&&!frozen && !p.dead){
+4803|
+4804|  for(let i=NV.asteroids.length-1;i>=0;i--){
+4805|    const a=NV.asteroids[i];
+4806|    if(playing&&!frozen){ a.x+=a.vx; a.y+=a.vy; a.rot+=a.vr;
+4807|      let astDead = false;
+4808|      querySpatialGrid(a.x, a.y, a.r + 16, function(item, type){
+4809|        if(astDead) return true;
+4810|        if(type === 'enemy'){
+4811|          const e = item;
+4812|          const idx = NV.enemies.indexOf(e);
+4813|          if(idx >= 0){
+4814|            killEnemy(e, idx, false);
+4815|            a.hp -= 1;
+4816|            sparks(a.x, a.y, 4, '#fbbf24');
+4817|            nvBoom(a.x, a.y, .5, 'rock');
+4818|            if(a.hp <= 0){
+4819|              astDead = true;
+4820|              if(a.vol) detonateAsteroid(a, i);
+4821|              else NV.asteroids.splice(i, 1);
+4822|              return true;
+4823|            }
+4824|          }
+4825|        }
+4826|        return false;
+4827|      });
+4828|      if(astDead) continue;
+4829|    }
+4830|    if(NV.asteroids[i]!==a) continue;
+4831|    nvCtx.save(); nvCtx.translate(a.x,a.y); nvCtx.rotate(a.rot);
+4832|    nvCtx.fillStyle='#8a867a'; nvCtx.strokeStyle='#55504a'; nvCtx.lineWidth=2;
+5028|    sfx(800,.2,'sine',.15); setTimeout(()=>sfx(1200,.2,'sine',.15),150);
+5029|  }
+5030|});
+5031|addEventListener('keyup',function(e){ NV.keys[e.key]=false; });
+5032|
+5033|const joyBase=document.querySelector('.joy-base');
+5034|const joyStick=document.getElementById('joyStick');
+5035|let joyActive=false, joyStartX=0, joyStartY=0;
+5036|function handleJoyStart(e){ e.preventDefault(); joyActive=true;
+5037|  const r=joyBase.getBoundingClientRect();
+5038|  joyStartX=r.left+r.width/2; joyStartY=r.top+r.height/2;
+5039|  handleJoyMove(e); }
+5040|function handleJoyMove(e){ if(!joyActive)return; e.preventDefault();
+5041|  const touch=e.touches?e.touches[0]:e;
+5042|  let dx=touch.clientX-joyStartX, dy=touch.clientY-joyStartY;
+5043|  const maxR=50; const d=Math.hypot(dx,dy);
+5044|  if(d>maxR){ dx=dx/d*maxR; dy=dy/d*maxR; }
+5045|  NV.touch.dx=dx/maxR; NV.touch.dy=dy/maxR;
+5046|  joyStick.style.left=(60+dx)+'px'; joyStick.style.bottom=(60-dy)+'px'; }
+5047|function handleJoyEnd(e){ if(e) e.preventDefault(); joyActive=false;
+5048|  NV.touch.dx=0; NV.touch.dy=0;
+5049|  joyStick.style.left='60px'; joyStick.style.bottom='60px'; }
+5050|joyBase.addEventListener('mousedown',handleJoyStart);
+5051|joyBase.addEventListener('touchstart',handleJoyStart,{passive:false});
+5052|document.addEventListener('mousemove',handleJoyMove);
+5053|document.addEventListener('touchmove',handleJoyMove,{passive:false});
+5054|document.addEventListener('mouseup',handleJoyEnd);
+5055|document.addEventListener('touchend',handleJoyEnd);
+5056|
+5057|document.querySelectorAll('.tbtn').forEach(function(btn){
+5058|  const a=btn.dataset.a;
+5059|  function act(e){ if(e) e.preventDefault();
+5060|    if(a==='dash')doDash(); else if(a==='mis')fireMissiles();
+5061|    else if(a==='las')firePierce(); else if(a==='bmb')useBomb(); }
+5062|  btn.addEventListener('mousedown',act);
+5063|  btn.addEventListener('touchstart',act,{passive:false});
+5064|});
+5065|
+5066|const cCv=document.getElementById('confetti'),cCtx=cCv.getContext('2d');
+5067|function cSize(){cCv.width=innerWidth;cCv.height=innerHeight;} cSize(); addEventListener('resize',cSize);
+5068|let parts=[]; const cEm=['🪙','🎊','😈','🎈','🎆','💳'];
+5069|function confettiBurst(x,y){ for(let i=0;i<70;i++)parts.push({x:x,y:y,vx:(Math.random()-.5)*14,vy:Math.random()*-12-3,g:.4,r:Math.random()*360,vr:(Math.random()-.5)*20,e:cEm[Math.floor(Math.random()*cEm.length)],s:14+Math.random()*16,l:120}); }
+5070|(function cLoop(){ cCtx.clearRect(0,0,cCv.width,cCv.height); parts=parts.filter(function(pp){return pp.l>0;});
+5071|  parts.forEach(function(pp){ pp.x+=pp.vx;pp.y+=pp.vy;pp.vy+=pp.g;pp.r+=pp.vr;pp.l--;
+5072|    cCtx.save();cCtx.translate(pp.x,pp.y);cCtx.rotate(pp.r*Math.PI/180);cCtx.font=pp.s+'px serif';cCtx.textAlign='center';cCtx.fillText(pp.e,0,0);cCtx.restore(); });
+5073|  requestAnimationFrame(cLoop); })();
+5074|
+5075|setInterval(function(){ document.getElementById('shieldPct').textContent=(96+Math.random()*4).toFixed(0)+'%'; },2500);
+5076|if(window.innerWidth > 768 && !isTouch){
+5077|  openWindow('win-main');
+5078|} else {
+5079|  closeWindow('win-main');
+5080|}
+5081|refreshTask(); setTimeout(spawnPopup,6000);
+5082|
+5083|/* ============ VIRUSARC ANTI-TAMPER & CRYPTOGRAPHIC SECURITY SHIELD ============ */
+5084|function initSecurityShield(){
+5085|  // 1. Block Context Menu (permit desktop right-click menu & Minesweeper flagging)
+5086|  window.addEventListener('contextmenu', function(e){
+5087|    if(e.target.closest('.desktop') || e.target.closest('#ctxMenu') || e.target.closest('#msGrid') || e.target.closest('.dicon')) return;
+5088|    e.preventDefault();
+5089|    e.stopPropagation();
+5090|    return false;
+5091|  }, true);
+5092|
+5093|  // 2. Block DevTools Shortcuts (F12, Ctrl+Shift+I/J/C, Ctrl+U, Ctrl+S)
+5094|  window.addEventListener('keydown', function(e){
+5095|    if(e.key === 'F12' ||
+5096|       (e.ctrlKey && e.shiftKey && ['I','J','C','i','j','c'].includes(e.key)) ||
+5097|       (e.ctrlKey && ['u','U','s','S'].includes(e.key))){
+5098|      e.preventDefault();
+5099|      e.stopPropagation();
+5100|      return false;
+5101|    }
+5102|  }, true);
+5103|
+5104|  // 3. Heartbeat Memory Verification for Game
+5105|  setInterval(function(){
+5106|    if(typeof NV !== 'undefined' && NV.on){
+5107|      if(NV.score !== ((NV._scoreShadow - 0x1A4) ^ NV._scoreKey)){
+5108|        console.warn('[VIRUSARC ANTI-CHEAT] Tampered score memory discrepancy. Resetting.');
+5109|        NV.score = 0; NV._score = 0;
+5110|        NV._scoreShadow = (0 ^ NV._scoreKey) + 0x1A4;
+5111|        showStatus('⚠️ CHEAT DETECTED: SCORE RESET');
+5112|      }
+5113|    }
+5114|  }, 400);
+5115|
+5116|  // 4. DevTools Detection and Security Lockout
+5117|  let devtoolsDetected = false;
+5118|  const threshold = 160;
+5119|  setInterval(function(){
+5120|    const widthDiff = window.outerWidth - window.innerWidth > threshold;
+5121|    const heightDiff = window.outerHeight - window.innerHeight > threshold;
+5122|    if((widthDiff || heightDiff) && !devtoolsDetected){
+5123|      devtoolsDetected = true;
+5124|      const lockout = document.createElement('div');
+5125|      lockout.id = 'secLockout';
+5126|      lockout.style.cssText = 'position:fixed;inset:0;background:rgba(10,0,0,0.96);color:#ff003c;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;text-align:center;padding:20px;';
+5127|      lockout.innerHTML = '<div style="font-size:60px;margin-bottom:14px;filter:drop-shadow(0 0 20px #ff003c);">🛡️</div><h2 style="font-size:28px;letter-spacing:3px;margin-bottom:12px;color:#ff003c;text-shadow:0 0 10px #ff003c;">VIRUSARC SECURITY LOCKDOWN</h2><p style="font-size:15px;color:#cfe8ff;max-width:540px;line-height:1.6;">Developer inspection environment detected. Client memory manipulation, console modifications, and script injections are cryptographically blocked.</p><button onclick="location.reload()" style="margin-top:24px;padding:12px 28px;background:linear-gradient(180deg,#ff003c,#b91c1c);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;font-size:15px;box-shadow:0 0 20px rgba(255,0,60,.5);">RELOAD SYSTEM</button>';
+5128|      document.body.appendChild(lockout);
+5129|    }
+5130|  }, 1000);
+5131|}
+5132|initSecurityShield();
+5134|  nvCtx.restore();
+5135|}
+5136|requestAnimationFrame(nvLoop);
+5137|addEventListener('resize',function(){ if(NV.on)nvResize(); });addEventListener('keydown',function(e){
+5138|  if(!NV.on)return;
+5139|  if(NV.state==='intro'){ endNvIntro(); return; }
+5140|  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].indexOf(e.key)>=0)e.preventDefault();
+5141|  NV.keys[e.key]=true;
+5142|  if(e.key==='Shift')doDash();
+5143|  if(e.key==='x'||e.key==='X')fireMissiles();
+5197|}
+5198|addEventListener('resize', nvScheduleResize);
+5199|addEventListener('orientationchange',function(){ setTimeout(nvScheduleResize, 260); });
+5200|if(window.visualViewport){
+5201|  window.visualViewport.addEventListener('resize', nvScheduleResize);
+5202|}
+5203|addEventListener('keydown',function(e){
+5204|  if(!NV.on)return;
+5205|  if(NV.state==='intro'){ endNvIntro(); return; }
+5206|  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].indexOf(e.key)>=0)e.preventDefault();
+5207|  NV.keys[e.key]=true;
+5208|  if(e.key==='Shift')doDash();
+5209|  if(e.key==='x'||e.key==='X')fireMissiles();
+5210|  if(e.key==='c'||e.key==='C')firePierce();
+5244|document.addEventListener('touchend',handleJoyEnd);
+5245|
+5246|document.querySelectorAll('.tbtn').forEach(function(btn){
+5247|  const a=btn.dataset.a;
+5248|  function act(e){ if(e) e.preventDefault();
+5249|    if(a==='dash')doDash(); else if(a==='mis')fireMissiles();
+5250|    else if(a==='las')firePierce(); else if(a==='bmb')useBomb(); }
+5251|  btn.addEventListener('mousedown',act);
+5252|  btn.addEventListener('touchstart',act,{passive:false});
+5253|});
+5254|
+5255|const cCv=document.getElementById('confetti'),cCtx=cCv.getContext('2d');
+5256|function cSize(){cCv.width=innerWidth;cCv.height=innerHeight;} cSize(); addEventListener('resize',cSize);
+5257|let parts=[]; const cEm=['🪙','🎊','😈','🎈','🎆','💳'];
+5275|    NV.glitch--;
+5276|    for(let i=0;i<3;i++){
+5277|      const sy=Math.random()*H, h=6+Math.random()*22, dx=(Math.random()-.5)*36;
+5278|      nvCtx.drawImage(nvCv,0,sy,W,h,dx,sy,W,h);
+5279|    }
+5280|    nvCtx.save(); nvCtx.globalCompositeOperation='lighter'; nvCtx.globalAlpha=.1;
+5281|    nvCtx.fillStyle='#f00'; nvCtx.fillRect(3,0,W,H);
+5282|    nvCtx.fillStyle='#00f'; nvCtx.fillRect(-3,0,W,H);
+5283|    nvCtx.restore();
+5284|  }
+5285|}
+5286|function drawShip(x,y,ax,dashing){
+5287|  nvCtx.save(); nvCtx.translate(x,y); nvCtx.rotate(-ax*.14);
+5288|  nvCtx.scale(1.28,1.28); // Bigger player ship
+5289|
+5290|  // Dual plasma thruster halos at the bottom legs of the Arc logo (x = -17 and x = +18)
+5291|  nvCtx.save(); nvCtx.globalCompositeOperation='lighter';
+5292|  const egLeft=nvCtx.createRadialGradient(-17,20,0,-17,20,34);
+5293|  egLeft.addColorStop(0,'rgba(0,212,255,.8)'); egLeft.addColorStop(1,'rgba(0,0,0,0)');
+5294|  nvCtx.fillStyle=egLeft; nvCtx.beginPath(); nvCtx.arc(-17,20,34,0,7); nvCtx.fill();
+5295|
+5296|  const egRight=nvCtx.createRadialGradient(18,20,0,18,20,34);
+5297|  egRight.addColorStop(0,'rgba(0,212,255,.8)'); egRight.addColorStop(1,'rgba(0,0,0,0)');
+5298|  nvCtx.fillStyle=egRight; nvCtx.beginPath(); nvCtx.arc(18,20,34,0,7); nvCtx.fill();
+5299|  nvCtx.restore();
+5300|
+5301|  // Dual thruster flames from both legs (enlarged)
+5302|  const fCol = (NV.t%6<3)?'#00d4ff':'#aefcff';
+5303|  const fCore = (NV.t%6<3)?'#ffffff':'#7cbb00';
+5304|  // Left leg flame
+5305|  nvCtx.fillStyle=fCol;
+5306|  nvCtx.beginPath();
+5307|  nvCtx.moveTo(-20-ax*1.5, 19);
+5308|  nvCtx.lineTo(-17-ax*3, 33+Math.random()*10);
+5309|  nvCtx.lineTo(-14-ax*1.5, 19);
+5310|  nvCtx.closePath(); nvCtx.fill();
+5311|  nvCtx.fillStyle=fCore;
+5312|  nvCtx.beginPath();
+5313|  nvCtx.moveTo(-19-ax, 19);
+5314|  nvCtx.lineTo(-17-ax*2, 27+Math.random()*5);
+5475|
+5476|  // 4. DevTools Detection and Security Lockout (SOLO DESKTOP)
+5477|  // Antes se comparaba outer* - inner* contra un umbral fijo de 160 px para
+5478|  // cualquier plataforma. En móviles y webviews (iOS Safari, Chrome Android,
+5479|  // navegadores in-app) esa diferencia supera siempre el umbral porque la barra
+5480|  // de URL y los controles del sistema no cuentan como viewport: la web creía
+5481|  // que había DevTools abiertas y mostraba el banner "Developer inspection
+5482|  // environment detected". Ahora la comprobación es desktop-only, ignora
+5483|  // dispositivos táctiles y exige una proporción anómala, no un valor absoluto.
+5484|  let devtoolsDetected = false;
+5485|  function devtoolsCheckApplies(){
+5486|    if(isTouch || navigator.maxTouchPoints > 0) return false;
+5487|    if(window.innerWidth < 900) return false;
+5488|    if(!window.matchMedia) return true;
+5489|    try{
+5490|      if(window.matchMedia('(pointer: coarse)').matches) return false;
+5491|      if(window.matchMedia('(hover: none)').matches) return false;
+5492|    }catch(e){}
+5493|    return true;
+5494|  }
+5495|  setInterval(function(){
+5496|    if(devtoolsDetected || !devtoolsCheckApplies()) return;
+5497|    const wDiff = window.outerWidth - window.innerWidth;
+5498|    const hDiff = window.outerHeight - window.innerHeight;
+5499|    const misconfigured = (wDiff > 160 && wDiff / window.innerWidth > 0.25) ||
+5500|                          (hDiff > 260 && hDiff / window.innerHeight > 0.30);
+5501|    if(misconfigured){
+5502|      devtoolsDetected = true;
+5503|      const lockout = document.createElement('div');
+5504|      lockout.id = 'secLockout';
+5505|      lockout.style.cssText = 'position:fixed;inset:0;background:rgba(10,0,0,0.96);color:#ff003c;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;text-align:center;padding:20px;';
+5506|      lockout.innerHTML = '<div style="font-size:60px;margin-bottom:14px;filter:drop-shadow(0 0 20px #ff003c);">🛡️</div><h2 style="font-size:28px;letter-spacing:3px;margin-bottom:12px;color:#ff003c;text-shadow:0 0 10px #ff003c;">VIRUSARC SECURITY LOCKDOWN</h2><p style="font-size:15px;color:#cfe8ff;max-width:540px;line-height:1.6;">Developer inspection environment detected. Client memory manipulation, console modifications, and script injections are cryptographically blocked.</p><button onclick="location.reload()" style="margin-top:24px;padding:12px 28px;background:linear-gradient(180deg,#ff003c,#b91c1c);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;font-size:15px;box-shadow:0 0 20px rgba(255,0,60,.5);">RELOAD SYSTEM</button>';
+5507|      document.body.appendChild(lockout);
+5508|    }
+5509|  }, 1000);
+5510|}
+5511|initSecurityShield();
+5512|    }catch(e){ return false; }
+5513|    return true;
