@@ -3673,12 +3673,13 @@ function filterArcCmd(q){
      y cerraría el teclado del móvil. */
 function initGlobalTapToClick(){
   const MAX_DRIFT = 10;          // px de movimiento tolerados para considerarlo tap
-  const DEDUPE_MS = 350;         // ventana anti-repetición (gestos distintos)
-  let lastTapHandled = 0;
-  let syntheticInFlight = false; // evita que mi propio click bloquee la síntesis
-  let clickSeenAt = 0;           // cuándo se vio un click nativo por última vez
+  const PER_EL_MS = 500;         // anti rebote por elemento (evita doble apertura)
+  let syntheticInFlight = false; // evita confundir mi propio click con uno nativo
+  let clickHandledThisTap = false; // ¿alguien atendió el click de este tap?
+  let clickSeenAt = 0;           // instante del último click NATIVO observado
   let startX = 0, startY = 0, tracking = false;
   let suppressUntil = 0;         // lo pone un manejador que ya hizo preventDefault
+  const lastDispatch = new WeakMap();  // elemento -> instante de su último tap
 
   function isTouchUI(){
     return isTouch || ('ontouchstart' in window) || window.innerWidth <= 768
@@ -3693,8 +3694,7 @@ function initGlobalTapToClick(){
       '[onclick], [ondblclick], [data-url]');
   }
 
-  /** Dispara un click sintético sobre el elemento (y sobre sus ancestros
-   *  pulsables, por si el manejador está en el contenedor). */
+  /** Dispara un click sintético sobre el elemento. */
   function fireSynthetic(el, x, y){
     syntheticInFlight = true;
     try {
@@ -3740,18 +3740,41 @@ function initGlobalTapToClick(){
 
   function handleTap(target, x, y){
     const now = Date.now();
-    if(now - lastTapHandled < DEDUPE_MS) return;   // dos dedos / doble tap
-    lastTapHandled = now;
+    const tappable = (target.closest && target.closest('button, a, .dicon, .ctx-item, .nv-btn, .nv-glass, .nv-primary, .meme-tile, .home-tile, .bm-btn, .space-btn, .lb-tab, .tb-win, .start-btn, .sm-item, .arc-cmd-item, [onclick], [ondblclick], [data-url]')) || target;
 
-    // Si el navegador acaba de emitir un click nativo, ese ya hizo el trabajo.
-    if(now - clickSeenAt < DEDUPE_MS) return;
+    // Anti rebote POR ELEMENTO: dos eventos del mismo gesto llegan con pocos ms
+    // de diferencia, pero tocar otra app después no debe quedar bloqueado (con
+    // un guardia global, abrir A y luego B seguido descartaba B).
+    const prev = lastDispatch.get(tappable) || 0;
+    if(now - prev < PER_EL_MS) return;
+    lastDispatch.set(tappable, now);
 
-    fireSynthetic(target, x, y);
+    // Distinguir el TIPO de manejador es lo que evita tanto el doble disparo
+    // como el "no hace nada":
+    //  - onclick  -> lo atiende un click (el nativo del navegador o el sintético).
+    //  - ondblclick -> NINGÚN click sintético produce un dblclick, así que hay que
+    //    ejecutar el handler del botón a mano. Es el caso de los iconos del
+    //    escritorio, y sin esto no abrían en el móvil.
+    const dblNode = target.closest && target.closest('[ondblclick]');
+    const clickNode = target.closest && target.closest('[onclick]');
 
-    // ¿Lo ha gestionado alguien? Si no, ejecutamos el handler a mano.
-    if(clickSeenAt < now){
-      runAttrFallback(target);
+    if(dblNode && !clickNode){
+      runAttrFallback(target);          // iconos: una sola ejecución, directa
+      return;
     }
+    if(clickNode){
+      // Si el navegador acaba de entregar su propio click, lo dejamos a él.
+      if((now - clickSeenAt) < 400) return;
+      fireSynthetic(target, x, y);
+      return;
+    }
+    // Elementos sin handlers inline (fichas con data-url, listeners añadidos por JS)
+    fireSynthetic(target, x, y);
+    const raf = window.requestAnimationFrame || function(fn){ return setTimeout(fn, 16); };
+    raf(function(){
+      if(clickHandledThisTap) return;
+      runAttrFallback(target);
+    });
   }
 
   document.addEventListener('touchstart', function(e){
@@ -3787,12 +3810,12 @@ function initGlobalTapToClick(){
     if(e.defaultPrevented) suppressUntil = Date.now() + 600;
   }, { capture: false, passive: true });
 
-  // Registro de clicks reales. CLAVE: el click que sintetizo yo NO debe contar
-  // como "el navegador ya lo hizo", porque entonces la vía 2 se desactivaría
-  // sola (era el bug que rompía Android, donde Chrome sí emite click nativo).
+  // Registro de clicks: permite saber si el navegador ya entregó su propio click
+  // (Android) y si el tap fue atendido. El click sintético se distingue con
+  // syntheticInFlight para no contarlo como nativo.
   document.addEventListener('click', function(){
-    if(syntheticInFlight) return;   // es mi propio click
-    clickSeenAt = Date.now();
+    clickHandledThisTap = true;
+    if(!syntheticInFlight) clickSeenAt = Date.now();
   }, { capture: true, passive: true });
 }
 initGlobalTapToClick();
