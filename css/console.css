@@ -3,13 +3,7 @@
   :root {
     --arc-cyan:#00d4ff; --arc-green:#00ff41; --arc-red:#ff003c; --arc-amber:#fbbf24;
     --panel:#252535; --panel-border:#3d3d4d; --text-dim:#94a3b8; --text-bright:#e2e8f0;
-    /* Alto real de la taskbar y alto visible del viewport.
-       dvh se ajusta cuando el navegador móvil oculta/muestra su barra de URL,
-       algo que vh NO hace (era la causa de que las hojas se salieran de pantalla). */
-    --taskbar-h:36px;
-    --vh-full:100vh;
   }
-  @supports (height:100dvh) { :root { --vh-full:100dvh; } }
   /* Accessible focus ring (never leave keyboard users blind) */
   :focus-visible { outline:2px solid var(--arc-cyan); outline-offset:2px; }
   /* Inputs with outline:none get a visible container focus state instead */
@@ -95,16 +89,13 @@
 
   .wallpaper { position:fixed; inset:0; z-index:0;
     background:url('https://image.qwenlm.ai/public_source/3d979a43-82ee-4343-8b69-e361d504124c/1a2ff0b7b-b28f-4d4d-9986-4323eaa63215.png') center/cover no-repeat; }
-  .desktop { position:fixed; inset:0 0 var(--taskbar-h) 0; z-index:5; }
+  .desktop { position:fixed; inset:0 0 36px 0; z-index:5; }
   .dicons { position:absolute; inset:0; pointer-events:none; }
   .dicon { position:absolute; width:86px; text-align:center; color:#fff; cursor:pointer; padding:6px 2px; border:1px dotted transparent; border-radius:3px; pointer-events:auto; user-select:none; }
   .dicon:hover { background:rgba(11,97,217,.35); border-color:rgba(255,255,255,.5); }
   .dicon.dragging { opacity:0.85; z-index:50; cursor:grabbing; background:rgba(11,97,217,.5); border-color:rgba(255,255,255,.8); }
   .dicon .ico { font-size:36px; display:block; filter:drop-shadow(1px 2px 2px rgba(0,0,0,.6)); pointer-events:none; }
   .dicon .lbl { font-size:11px; text-shadow:1px 1px 2px #000; margin-top:3px; line-height:1.2; pointer-events:none; }
-
-  /* El dock móvil se retiró: con el sintetizador global de tap→click los iconos
-     del escritorio abren siempre, así que no hace falta un lanzador aparte. */
 
   .ctx-menu { position:fixed; z-index:3000; display:none; width:230px; background:#fff; border:1px solid #808080; box-shadow:3px 3px 8px rgba(0,0,0,.4); padding:2px; }
   .ctx-menu.show { display:block; }
@@ -330,12 +321,13 @@
 
   #pbCanvas { background:#05010f; border:1px solid #404040; display:block; margin:0 auto; }
 
-  /* SHIPS.EXE v4.2 */
+  /* NAVES v4.2 */
   #navesGame { position:fixed; inset:0; z-index:4600; display:none; background:#000; touch-action:none; }
   #navesGame.show { display:block; }
   #nvCanvas { position:absolute; inset:0; width:100%; height:100%; display:block; image-rendering:auto; will-change:transform; }
-  .nv-layer { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px; text-align:center; overflow-y:auto; padding:20px 0; }
+  .nv-layer { position:absolute; inset:0; z-index:50; display:none; align-items:center; justify-content:flex-start; flex-direction:column; gap:14px; text-align:center; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:24px 12px 60px; box-sizing:border-box; }
   .nv-layer.show { display:flex; }
+  .nv-layer::before, .nv-layer::after { content:''; margin:auto; }
   #nvMenu { background:rgba(0,0,10,.45); }
   .nv-title { font-family:'VT323',monospace; font-size:64px; color:#fff; text-shadow:0 0 20px #00d4ff, 0 0 40px #ff00ff; letter-spacing:8px; }
   .nv-sub { color:#9fd4ff; font-family:'VT323',monospace; font-size:20px; letter-spacing:3px; margin-top:-8px; }
@@ -381,11 +373,6 @@
   @keyframes lbFlash { 50% { background:rgba(251,191,36,.4); } }
   .lb-input { background:rgba(0,0,0,.5); border:2px solid #fbbf24; border-radius:8px; padding:10px 14px; color:#fff; font-family:'VT323',monospace; font-size:22px; width:280px; max-width:80%; text-align:center; letter-spacing:2px; outline:none; }
   .lb-input:focus { box-shadow:0 0 20px rgba(251,191,36,.5); }
-  /* Campo wallet y estados de validación */
-  .lb-wallet-input { font-size:17px; letter-spacing:0; width:340px; max-width:92%; }
-  .lb-input.err { border-color:#ff2d55; box-shadow:0 0 22px rgba(255,45,85,.65); animation:walletShake .3s ease-in-out 2; }
-  @keyframes walletShake { 0%,100%{ transform:translateX(0); } 25%{ transform:translateX(-6px); } 75%{ transform:translateX(6px); } }
-  .lb-table .lb-wallet { color:#9fd4ff; font-size:15px; cursor:help; }
   .lb-save-msg { color:#7cbb00; font-family:'VT323',monospace; font-size:18px; margin-top:8px; min-height:22px; }
 
   #nvHUD { position:absolute; inset:0; display:none; pointer-events:none; z-index:6; font-family:'VT323',monospace; padding:12px 16px; }
@@ -423,18 +410,24 @@
   .hud-lifebonus.show { animation:lifeBonus 1.5s ease-out; }
   @keyframes lifeBonus { 0% { opacity:0; transform:translateX(-50%) scale(.5); } 30% { opacity:1; transform:translateX(-50%) scale(1.2); } 100% { opacity:0; transform:translateX(-50%) translateY(-40px) scale(1); } }
 
-  .touch-zone { position:absolute; z-index:7; display:none; pointer-events:auto; }
-  #touchJoy { left:14px; bottom:14px; width:150px; height:150px; }
+  .touch-zone { position:absolute; z-index:20; display:none; pointer-events:auto; touch-action:none; }
+  #touchJoy { left:14px; bottom:14px; width:160px; height:160px; }
   #touchJoy.show, #touchBtns.show { display:block; }
-  .joy-base { position:absolute; left:15px; bottom:15px; width:120px; height:120px; border-radius:50%; background:rgba(0,212,255,.12); border:2.5px solid rgba(0,212,255,.5); box-shadow:0 0 15px rgba(0,212,255,.25); }
-  .joy-stick { position:absolute; width:52px; height:52px; border-radius:50%; background:rgba(0,212,255,.55); border:2.5px solid #00d4ff; left:60px; bottom:60px; transform:translate(-50%,-50%); box-shadow:0 0 12px #00d4ff; }
-  #touchBtns { right:14px; bottom:14px; width:170px; height:170px; }
-  .tbtn { position:absolute; width:70px; height:70px; border-radius:50%; background:rgba(8,12,28,.75); border:2.5px solid #00d4ff; color:#fff; font-size:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 0 14px rgba(0,0,0,.75); transition:transform .1s, background .15s; user-select:none; -webkit-user-select:none; touch-action:none; }
-  .tbtn:active { background:rgba(0,212,255,.45); transform:scale(.92); }
+  .joy-base { position:absolute; left:15px; bottom:15px; width:130px; height:130px; border-radius:50%; background:rgba(0,212,255,.12); border:2.5px solid rgba(0,212,255,.5); box-shadow:0 0 15px rgba(0,212,255,.25); touch-action:none; }
+  .joy-stick { position:absolute; width:54px; height:54px; border-radius:50%; background:rgba(0,212,255,.55); border:2.5px solid #00d4ff; left:65px; bottom:65px; transform:translate(-50%,-50%); box-shadow:0 0 12px #00d4ff; pointer-events:none; }
+  #touchBtns { right:14px; bottom:14px; width:180px; height:180px; }
+  .tbtn { position:absolute; width:72px; height:72px; border-radius:50%; background:rgba(8,12,28,.82); border:2.5px solid #00d4ff; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 0 14px rgba(0,0,0,.75); transition:transform .08s, background .12s, opacity .2s; user-select:none; -webkit-user-select:none; touch-action:manipulation; }
+  .tbtn:active, .tbtn.active { background:rgba(0,212,255,.45); transform:scale(.92); }
+  .tbtn.cooldown { opacity:0.45; filter:grayscale(0.6); }
+  .tbtn .tb-ico { font-size:24px; line-height:1; pointer-events:none; }
+  .tbtn .tb-lbl { font-family:'VT323',monospace; font-size:12px; letter-spacing:1px; line-height:1; margin-top:2px; color:#9fd4ff; pointer-events:none; }
   .tbtn.dash { right:6px; bottom:6px; border-color:#7cbb00; box-shadow:0 0 12px rgba(124,187,0,.45); }
-  .tbtn.mis { right:86px; bottom:6px; border-color:#ff9500; box-shadow:0 0 12px rgba(255,149,0,.45); }
-  .tbtn.las { right:6px; bottom:86px; border-color:#00d4ff; box-shadow:0 0 12px rgba(0,212,255,.45); }
-  .tbtn.bmb { right:86px; bottom:86px; border-color:#ff2d55; box-shadow:0 0 12px rgba(255,45,85,.45); }
+  .tbtn.mis { right:92px; bottom:6px; border-color:#ff9500; box-shadow:0 0 12px rgba(255,149,0,.45); }
+  .tbtn.las { right:6px; bottom:92px; border-color:#00d4ff; box-shadow:0 0 12px rgba(0,212,255,.45); }
+  .tbtn.bmb { right:92px; bottom:92px; border-color:#ff2d55; box-shadow:0 0 12px rgba(255,45,85,.45); }
+
+  .nv-pause-btn { pointer-events:auto; background:rgba(0,20,40,.85); border:2px solid #00d4ff; border-radius:8px; color:#00d4ff; font-size:18px; width:44px; height:38px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 0 10px rgba(0,212,255,.3); margin-bottom:6px; transition:all .15s; touch-action:manipulation; }
+  .nv-pause-btn:active { background:rgba(0,212,255,.4); color:#fff; transform:scale(.94); }
 
   @media (max-width: 640px) {
     .hud-score { font-size:38px; }
@@ -443,14 +436,17 @@
     .hud-mod { width:46px; height:46px; }
     .hud-mod .ic { font-size:22px; }
     .hud-modules { gap:6px; }
-    #touchJoy { left:8px; bottom:8px; width:130px; height:130px; }
-    .joy-base { left:10px; bottom:10px; width:110px; height:110px; }
-    #touchBtns { right:8px; bottom:8px; width:155px; height:155px; }
-    .tbtn { width:62px; height:62px; font-size:25px; }
+    #touchJoy { left:6px; bottom:6px; width:140px; height:140px; }
+    .joy-base { left:10px; bottom:10px; width:120px; height:120px; }
+    .joy-stick { left:60px; bottom:60px; }
+    #touchBtns { right:6px; bottom:6px; width:165px; height:165px; }
+    .tbtn { width:66px; height:66px; }
+    .tbtn .tb-ico { font-size:22px; }
+    .tbtn .tb-lbl { font-size:11px; }
     .tbtn.dash { right:4px; bottom:4px; }
-    .tbtn.mis { right:76px; bottom:4px; }
-    .tbtn.las { right:4px; bottom:76px; }
-    .tbtn.bmb { right:76px; bottom:76px; }
+    .tbtn.mis { right:84px; bottom:4px; }
+    .tbtn.las { right:4px; bottom:84px; }
+    .tbtn.bmb { right:84px; bottom:84px; }
   }
 
   /* ARC BROWSER estilo Edge */
@@ -615,14 +611,11 @@
   @keyframes sheetSlideUp { from { transform:translateY(40px); opacity:.4; } to { transform:translateY(0); opacity:1; } }
 
   @media (max-width:768px) {
-    /* ---- VIEWPORT / SAFE AREA ---- */
-    :root { --taskbar-h:calc(48px + env(safe-area-inset-bottom, 0px)); }
     /* ---- DESKTOP GRID ---- */
     .desktop {
       overflow-y:auto;
       -webkit-overflow-scrolling:touch;
-      overscroll-behavior:contain;
-      padding-bottom:14px;
+      padding-bottom:58px;
     }
     .dicons {
       position:relative;
@@ -661,12 +654,12 @@
       position:fixed !important;
       left:0 !important;
       right:0 !important;
-      bottom:var(--taskbar-h) !important;
+      bottom:42px !important;
       top:auto !important;
       width:100vw !important;
       max-width:100vw !important;
-      height:calc(var(--vh-full) - var(--taskbar-h)) !important;
-      max-height:calc(var(--vh-full) - var(--taskbar-h)) !important;
+      height:calc(100vh - 42px) !important;
+      max-height:calc(100vh - 42px) !important;
       border-radius:18px 18px 0 0 !important;
       transform:none !important;
       border:none !important;
@@ -687,14 +680,13 @@
       flex-shrink:0;
     }
     .title-bar {
-      height:46px;
+      height:44px;
       padding:0 10px 0 16px;
       font-size:14px;
       font-weight:bold;
       cursor:default;
       letter-spacing:0.2px;
       border-radius:0 !important;
-      touch-action:none; /* habilita el gesto de deslizar hacia abajo para cerrar */
     }
     .title-bar span {
       overflow:hidden;
@@ -702,12 +694,11 @@
       white-space:nowrap;
       flex:1;
     }
-    .tb-btns { gap:4px; }
     .tb-btns button {
-      width:40px;
-      height:40px;
-      font-size:17px;
-      border-radius:8px;
+      width:36px;
+      height:36px;
+      font-size:16px;
+      border-radius:6px;
       flex-shrink:0;
     }
     .window-body {
@@ -728,42 +719,40 @@
 
     /* ---- TASKBAR ---- */
     .taskbar {
-      height:var(--taskbar-h);
+      height:42px;
       gap:4px;
-      padding:0 4px calc(env(safe-area-inset-bottom, 0px) / 2);
-      align-items:center;
+      padding:0 4px;
     }
     .start-btn {
-      height:42px;
-      padding:0 14px 0 10px;
-      font-size:14px;
+      height:34px;
+      padding:0 10px 0 8px;
+      font-size:13px;
       flex-shrink:0;
-      border-radius:0 10px 10px 0;
+      border-radius:0 8px 8px 0;
     }
     .tb-win-wrap {
       display:flex;
-      gap:5px;
+      gap:3px;
       flex:1;
       overflow-x:auto;
       -webkit-overflow-scrolling:touch;
-      overscroll-behavior-x:contain;
       scrollbar-width:none;
       align-items:center;
     }
     .tb-win-wrap::-webkit-scrollbar { display:none; }
     .tb-win {
-      height:38px;
-      max-width:130px;
-      min-width:64px;
-      font-size:11px;
+      height:28px;
+      max-width:110px;
+      min-width:60px;
+      font-size:10px;
       flex-shrink:0;
-      padding:0 8px;
-      border-radius:6px;
+      padding:0 6px;
+      border-radius:4px;
     }
     .tray {
-      padding:0 8px;
-      font-size:11px;
-      gap:5px;
+      padding:0 6px;
+      font-size:10px;
+      gap:4px;
       flex-shrink:0;
     }
 
@@ -772,8 +761,8 @@
       width:100vw !important;
       left:0 !important;
       right:0 !important;
-      bottom:var(--taskbar-h) !important;
-      max-height:calc(var(--vh-full) - var(--taskbar-h) - 12px) !important;
+      bottom:42px !important;
+      max-height:calc(100vh - 54px) !important;
       border-radius:18px 18px 0 0;
       box-shadow:0 -6px 40px rgba(0,0,0,0.75);
       border:none;
@@ -785,17 +774,16 @@
     }
     .sm-body {
       flex-direction:column;
-      max-height:calc(var(--vh-full) - 170px);
+      max-height:calc(100vh - 160px);
       overflow-y:auto;
       -webkit-overflow-scrolling:touch;
-      overscroll-behavior:contain;
     }
     .sm-left, .sm-right { width:100%; }
     .sm-item {
       padding:11px 16px;
-      font-size:14px;
-      min-height:50px;
-      border-radius:8px;
+      font-size:13px;
+      min-height:46px;
+      border-radius:6px;
     }
     .sm-item .ic { font-size:22px; width:28px; }
     .sm-bottom { padding:8px 12px; }
@@ -821,11 +809,7 @@
     .lb-wrap { padding:14px 12px; }
     .lb-table { font-size:15px; }
     .lb-table td, .lb-table th { padding:5px 6px; }
-    /* La wallet es la columna 3: en móvil no cabe, se oculta visualmente
-       (el valor completo sigue en el atributo title de la celda) */
-    .lb-table th:nth-child(3), .lb-table td:nth-child(3) { display:none; }
-    .lb-input { width:100%; max-width:100%; font-size:20px; }
-    .lb-wallet-input { font-size:15px; }
+    .lb-table th:nth-child(4), .lb-table td:nth-child(4) { display:none; }
 
     /* ---- ARC BROWSER ---- */
     .browser-sidebar { width:0; padding:0; display:none; }
@@ -871,21 +855,7 @@
     .meme-grid { grid-template-columns:1fr !important; }
     .home-tiles { grid-template-columns:repeat(2,1fr); }
     .lb-table { font-size:13px; }
-    /* Pantallas muy pequeñas: además de la wallet se oculta la ronda */
-    .lb-table td:nth-child(5), .lb-table th:nth-child(5) { display:none; }
-  }
-
-  /* Móvil en horizontal: hay poca altura, así que los iconos y las ventanas se
-     compactan para que las apps sigan accesibles sin comer pantalla al juego. */
-  @media (max-width:950px) and (orientation:landscape) {
-    :root { --taskbar-h:calc(40px + env(safe-area-inset-bottom, 0px)); }
-    .dicons { grid-template-columns:repeat(auto-fill,minmax(74px,1fr)); gap:10px 8px;
-      padding:10px; }
-    .dicon { padding:6px 3px 5px; }
-    .dicon .ico { font-size:30px; }
-    .window { border-radius:12px 12px 0 0 !important; }
-    .home-page { padding:18px 14px; }
-    .home-logo { font-size:38px; margin-bottom:10px; }
+    .lb-table td:nth-child(3), .lb-table th:nth-child(3) { display:none; }
   }
 
   ::-webkit-scrollbar { width:14px; height:14px; } ::-webkit-scrollbar-track { background:#f1efe2; }

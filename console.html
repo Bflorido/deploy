@@ -2,42 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<!-- Viewport sin user-scalable=no ni maximum-scale.
-     Motivo: es una barrera de accesibilidad (WCAG 1.4.4) y hace fallar las
-     auditorías de Lighthouse/axe ("Zooming and scaling must not be disabled").
-     NO era la causa del banner de "entorno de desarrollo" en móvil: eso venía de
-     la detección de DevTools por dimensiones en initSecurityShield (js/console.js),
-     ya corregida. El canvas se reajusta solo en nvResize/resize. -->
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<script>
-/* ===== GUARDA ANTI-LOCKDOWN EN MÓVIL (se ejecuta ANTES que console.js) =====
-   El "SECURITY LOCKDOWN" (initSecurityShield en js/console.js) es lore de
-   escritorio. En iPhone aparecía por una detección de DevTools basada en el
-   tamaño de ventana, que en Safari iOS siempre da falso positivo.
-   Esta guarda se ejecuta en el <head>, antes que el resto del JS, y vigila el
-   DOM: si algún script (incluido un console.js ANTIGUO servido desde la caché de
-   Safari) inserta el overlay en un dispositivo táctil, lo elimina al instante.
-   Así el aviso no puede quedarse pegado aunque el JS esté cacheado. */
-(function(){
-  var touch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0);
-  var forced = false;
-  try { forced = /[?&]lockdown=(on|1)\b/.test(location.search); } catch(e){}
-  if(!touch || forced) return;
-  function kill(){
-    var el = document.getElementById('secLockout');
-    if(el && el.parentNode) el.parentNode.removeChild(el);
-  }
-  kill();
-  document.addEventListener('DOMContentLoaded', kill, false);
-  window.addEventListener('load', kill, false);
-  var obs = new MutationObserver(kill);
-  obs.observe(document.documentElement, { childList:true, subtree:true });
-})();
-</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ARCSYSTEMS XP — Professional</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/vt323@5.0.0/index.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.0/index.min.css">
-<link rel="stylesheet" href="css/console.css?v=5">
+<link rel="stylesheet" href="css/console.css">
 </head>
 <body>
 
@@ -65,7 +34,7 @@
   <div class="dicons">
     <div class="dicon" ondblclick="spawnToast(' My Computer: 500M tokens stored in C:\\ARC')"><span class="ico">💻</span><span class="lbl">My Computer</span></div>
     <div class="dicon" ondblclick="openWindow('win-main')"><span class="ico">🛡️</span><span class="lbl">VirusARC.exe</span></div>
-    <div class="dicon" ondblclick="openNaves()"><span class="ico">🚀</span><span class="lbl">Ships.exe</span></div>
+    <div class="dicon" ondblclick="openNaves()"><span class="ico">🚀</span><span class="lbl">ships.exe</span></div>
     <div class="dicon" ondblclick="openWindow('win-browser')"><span class="ico">🌐</span><span class="lbl">ARC Browser</span></div>
     <div class="dicon" ondblclick="openWindow('win-memes')"><span class="ico">📁</span><span class="lbl">Memes</span></div>
     <div class="dicon" ondblclick="openWindow('win-games')"><span class="ico">🎮</span><span class="lbl">Games</span></div>
@@ -166,7 +135,7 @@ C:\ARC> Desktop icons repaired ✓
                 <div class="news-time">5 min ago</div>
               </div>
               <div class="news-item">
-                <div class="news-title">🚀 Ships.exe v4.2 available</div>
+                <div class="news-title"> ships.exe v4.2 available</div>
                 <div class="news-time">2h ago</div>
               </div>
               <div class="news-item">
@@ -230,7 +199,7 @@ C:\ARC> Desktop icons repaired ✓
         <div class="meme-tile" style="padding:12px 6px;" onclick="openWindow('win-spider'); spiderNew();"><div class="mt-icon" style="font-size:36px;">🕷️</div><div class="mt-name" style="font-size:11px;">Spider Solitaire</div><span class="mt-badge play">PLAY</span></div>
         <div class="meme-tile" style="padding:12px 6px;" onclick="openWindow('win-pinball')"><div class="mt-icon" style="font-size:36px;">🚀</div><div class="mt-name" style="font-size:11px;">Space Pinball</div><span class="mt-badge play">PLAY</span></div>
       </div>
-      <div style="font-size:11px; margin-top:10px; color:#444; text-align:center;">* <b>Ships.exe v4.2</b>: Optimized + ARC Browser 🌐</div>
+      <div style="font-size:11px; margin-top:10px; color:#444; text-align:center;">* <b>ships.exe v4.2</b>: Optimized + ARC Browser 🌐</div>
     </div>
   </div>
 
@@ -319,6 +288,24 @@ Signed: The ARC AI.</div>
     <div class="status-bar"><span class="cell">Ln 1, Col 1</span><span class="cell">UTF-8</span></div>
   </div>
 
+  <div class="window" id="win-config" style="left:180px; top:120px; width:460px;">
+    <div class="title-bar purple"><span>🎛️ Display Properties — Personalize</span>
+      <div class="tb-btns"><button onclick="minimize('win-config')">_</button><button onclick="maxWin('win-config')">□</button><button class="close" onclick="closeWindow('win-config')">✕</button></div></div>
+    <div class="window-body">
+      <div class="cfg-section">
+        <div class="cfg-title">🖼️ Desktop Background (Wallpaper)</div>
+        <div class="cfg-grid" id="wpGrid"></div>
+      </div>
+      <div class="cfg-section">
+        <div class="cfg-title">🎨 Windows XP Color Scheme / Theme</div>
+        <div class="cfg-grid" id="thGrid"></div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+        <button class="btn98" onclick="closeWindow('win-config')">OK</button>
+        <button class="btn98" onclick="closeWindow('win-config')">Cancel</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="ctx-menu" id="ctxMenu">
@@ -385,7 +372,7 @@ Signed: The ARC AI.</div>
     <div class="sm-left">
       <div class="sm-item" onclick="openWindow('win-main'); toggleStart();"><span class="ic">🛡️</span> VirusARC.exe</div>
       <div class="sm-item" onclick="openWindow('win-browser'); toggleStart();"><span class="ic">🌐</span> ARC Browser</div>
-      <div class="sm-item" onclick="toggleStart(); openNaves();"><span class="ic">🚀</span> Ships.exe</div>
+      <div class="sm-item" onclick="toggleStart(); openNaves();"><span class="ic">🚀</span> ships.exe</div>
       <div class="sm-item" onclick="openWindow('win-memes'); toggleStart();"><span class="ic">📁</span> Memes</div>
       <div class="sm-item" onclick="openWindow('win-games'); toggleStart();"><span class="ic">🎮</span> Games</div>
       <div class="sm-item" onclick="openWindow('win-note'); toggleStart();"><span class="ic">📄</span> README.txt</div>
@@ -406,8 +393,7 @@ Signed: The ARC AI.</div>
   </div>
 </div>
 
-<!-- SHIPS.EXE v4.2 (STARSHIP ARC: VIRUS HUNTERS) — los identificadores internos
-     (openNaves, #navesGame, .nv-*) se conservan a propósito para no tocar el motor. -->
+<!-- NAVES v4.2 -->
 <div id="navesGame">
   <canvas id="nvCanvas"></canvas>
   <div id="nvHUD">
@@ -425,6 +411,7 @@ Signed: The ARC AI.</div>
         </div>
       </div>
       <div class="hud-right">
+        <button class="nv-pause-btn" id="nvPauseBtn" onclick="nvTogglePause()" title="Pause Game">⏸</button>
         <div class="hud-hearts" id="nvLives"></div>
         <div class="hud-modules" id="nvModules"></div>
       </div>
@@ -436,12 +423,12 @@ Signed: The ARC AI.</div>
     <div class="joy-base"><div class="joy-stick" id="joyStick"></div></div>
   </div>
   <div class="touch-zone" id="touchBtns">
-    <div class="tbtn dash" data-a="dash">🌀</div>
-    <div class="tbtn mis" data-a="mis">🎵</div>
-    <div class="tbtn las" data-a="las">⏳</div>
-    <div class="tbtn bmb" data-a="bmb">☣️</div>
+    <div class="tbtn dash" data-a="dash"><span class="tb-ico">🌀</span><span class="tb-lbl">DASH</span></div>
+    <div class="tbtn mis" data-a="mis"><span class="tb-ico">⚡</span><span class="tb-lbl">RAIL</span></div>
+    <div class="tbtn las" data-a="las"><span class="tb-ico">🛰️</span><span class="tb-lbl">ORBIT</span></div>
+    <div class="tbtn bmb" data-a="bmb"><span class="tb-ico">💣</span><span class="tb-lbl" id="tbBombCount">2</span></div>
   </div>
-  <div id="nvIntro" onclick="endNvIntro()">
+  <div id="nvIntro" onclick="endNvIntro()" ontouchend="endNvIntro()">
     <div class="si-card" id="siArc">
       <div class="si-coin"></div>
       <img class="si-logo-img" src="assets/arc_logo.png" alt="ARC Studios" onerror="this.style.display='none'">
@@ -486,8 +473,8 @@ Signed: The ARC AI.</div>
     </div>
     <button class="nv-btn" onclick="nvShow('nvMenu')">← BACK</button>
   </div>
-  <div class="nv-layer" id="nvBriefing">
-    <div class="brief-wrap">
+  <div class="nv-layer" id="nvBriefing" onclick="skipBriefing()">
+    <div class="brief-wrap" onclick="event.stopPropagation()">
       <div class="brief-title">⚡ PILOT BRIEFING ⚡</div>
       <div class="brief-sub">ROUND <span id="briefRound">1</span> • <span id="briefKind">RECON</span> • DIFFICULTY: <span id="briefDiff">ARCADE CHALLENGE</span></div>
       <div class="brief-grid">
@@ -515,13 +502,10 @@ Signed: The ARC AI.</div>
     <div class="nv-sub" id="nvFinalRound">ROUND: 0</div>
     <div class="nv-sub" id="nvBest" style="color:#fbbf24;">RECORD: 0</div>
     <div style="margin-top:10px;">
-      <div style="color:#fbbf24; font-family:'VT323',monospace; font-size:20px; margin-bottom:8px;">Enter your pilot name:</div>
-      <input type="text" class="lb-input" id="nvPilotName" maxlength="10" placeholder="YOUR NAME" onkeydown="if(event.key==='Enter'){var w=document.getElementById('nvPilotWallet'); if(w)w.focus();}">
-    </div>
-    <div style="margin-top:10px;">
-      <div style="color:#fbbf24; font-family:'VT323',monospace; font-size:20px; margin-bottom:8px;">Your wallet: <span style="color:#ff2d55;">*</span> <span style="color:#9fd4ff; font-size:15px;">(obligatoria)</span></div>
-      <input type="text" class="lb-input lb-wallet-input" id="nvPilotWallet" maxlength="64" placeholder="0x… or yourname.eth" spellcheck="false" autocomplete="off" onkeydown="if(event.key==='Enter')saveLeaderboard()">
-      <div style="font-size:11px; color:#94a3b8; font-family:'Inter',sans-serif; margin-top:6px; max-width:320px;">Dirección EVM (0x + 40 caracteres) o nombre .eth. Sin wallet no se puede guardar el record.</div>
+      <div style="color:#fbbf24; font-family:'VT323',monospace; font-size:20px; margin-bottom:4px;">Enter your pilot name:</div>
+      <input type="text" class="lb-input" id="nvPilotName" maxlength="10" placeholder="YOUR NAME" onkeydown="if(event.key==='Enter')document.getElementById('nvPilotWallet').focus()">
+      <div style="color:#00d4ff; font-family:'VT323',monospace; font-size:18px; margin-top:8px; margin-bottom:4px;">MetaMask / EVM Wallet (Required):</div>
+      <input type="text" class="lb-input" id="nvPilotWallet" placeholder="0x..." spellcheck="false" autocomplete="off" style="font-family:monospace; font-size:12px; letter-spacing:0.5px;" onkeydown="if(event.key==='Enter')saveLeaderboard()">
     </div>
     <div class="lb-save-msg" id="lbSaveMsg"></div>
     <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
@@ -539,7 +523,7 @@ Signed: The ARC AI.</div>
       </div>
       <div id="lbWeeklyNotice" class="lb-notice">⏱️ Resets every 7 days • Next reset in: <b id="lbWeeklyCountdown">--</b></div>
       <table class="lb-table">
-        <thead><tr><th>#</th><th>PILOT</th><th>WALLET</th><th>SCORE</th><th>ROUND</th><th>DATE</th></tr></thead>
+        <thead><tr><th>#</th><th>PILOT</th><th>SCORE</th><th>ROUND</th><th>DATE</th></tr></thead>
         <tbody id="lbBody"></tbody>
       </table>
       <div style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
@@ -571,14 +555,11 @@ Signed: The ARC AI.</div>
 <!-- ARC COMMAND PALETTE MODAL -->
 <div class="arc-cmd-modal" id="arcCmdModal" onclick="if(event.target===this)toggleArcCmd(false)">
   <div class="arc-cmd-box">
-    <input type="text" class="arc-cmd-input" id="arcCmdInput" placeholder="Type a command or search... (e.g. swap, meme, scan, ships)" oninput="filterArcCmd(this.value)" autocomplete="off" spellcheck="false">
+    <input type="text" class="arc-cmd-input" id="arcCmdInput" placeholder="Type a command or search... (e.g. swap, meme, scan, naves)" oninput="filterArcCmd(this.value)" autocomplete="off" spellcheck="false">
     <div class="arc-cmd-list" id="arcCmdList"></div>
   </div>
 </div>
 
-<!-- El sufijo ?v= es el sello de versión: al cambiarlo, los móviles descargan el
-     archivo nuevo en lugar de reutilizar el de su caché (Chrome iOS es muy
-     agresivo). IMPORTANTE: subir el número cada vez que se modifique el JS o el CSS. -->
-<script src="js/console.js?v=5"></script>
+<script src="js/console.js"></script>
 </body>
 </html>
