@@ -338,10 +338,6 @@ Signed: The ARC AI.</div>
   </div>
 </div>
 
-<!-- DOCK MÓVIL: se rellena desde JS con los mismos accesos que los iconos del
-     escritorio. Solo visible en pantallas táctiles/estrechas (ver console.css). -->
-<div class="mobile-dock" id="mobileDock" aria-label="Accesos rápidos"></div>
-
 <div class="taskbar">
   <button class="start-btn" id="startBtn" onclick="toggleStart(event)"><img src="assets/arc_logo.png" alt="ARC" style="width:20px;height:20px;object-fit:contain;filter:drop-shadow(0 0 6px rgba(0,212,255,.7));" onerror="this.style.display='none'"> start</button>
   <div class="tb-win-wrap">
@@ -495,7 +491,12 @@ Signed: The ARC AI.</div>
     <div class="nv-sub" id="nvBest" style="color:#fbbf24;">RECORD: 0</div>
     <div style="margin-top:10px;">
       <div style="color:#fbbf24; font-family:'VT323',monospace; font-size:20px; margin-bottom:8px;">Enter your pilot name:</div>
-      <input type="text" class="lb-input" id="nvPilotName" maxlength="10" placeholder="YOUR NAME" onkeydown="if(event.key==='Enter')saveLeaderboard()">
+      <input type="text" class="lb-input" id="nvPilotName" maxlength="10" placeholder="YOUR NAME" onkeydown="if(event.key==='Enter'){var w=document.getElementById('nvPilotWallet'); if(w)w.focus();}">
+    </div>
+    <div style="margin-top:10px;">
+      <div style="color:#fbbf24; font-family:'VT323',monospace; font-size:20px; margin-bottom:8px;">Your wallet: <span style="color:#ff2d55;">*</span> <span style="color:#9fd4ff; font-size:15px;">(obligatoria)</span></div>
+      <input type="text" class="lb-input lb-wallet-input" id="nvPilotWallet" maxlength="64" placeholder="0x… or yourname.eth" spellcheck="false" autocomplete="off" onkeydown="if(event.key==='Enter')saveLeaderboard()">
+      <div style="font-size:11px; color:#94a3b8; font-family:'Inter',sans-serif; margin-top:6px; max-width:320px;">Dirección EVM (0x + 40 caracteres) o nombre .eth. Sin wallet no se puede guardar el record.</div>
     </div>
     <div class="lb-save-msg" id="lbSaveMsg"></div>
     <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
@@ -513,7 +514,7 @@ Signed: The ARC AI.</div>
       </div>
       <div id="lbWeeklyNotice" class="lb-notice">⏱️ Resets every 7 days • Next reset in: <b id="lbWeeklyCountdown">--</b></div>
       <table class="lb-table">
-        <thead><tr><th>#</th><th>PILOT</th><th>SCORE</th><th>ROUND</th><th>DATE</th></tr></thead>
+        <thead><tr><th>#</th><th>PILOT</th><th>WALLET</th><th>SCORE</th><th>ROUND</th><th>DATE</th></tr></thead>
         <tbody id="lbBody"></tbody>
       </table>
       <div style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">

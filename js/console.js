@@ -8,33 +8,6 @@
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 /** JSON.parse tolerante a corrupción: devuelve fallback si falla. */
 function safeParse(raw, fallback){ try{ const v = JSON.parse(raw); return v === null ? fallback : v; } catch(e){ return fallback; } }
-/** Ejecuta una acción de icono definida como string (atributo ondblclick),
- *  compartida por el escritorio y el dock móvil. */
-function runIconActionString(src){
-  try { new Function(src)(); } catch(err){ /* acción inválida: se ignora */ }
-}
-
-/** Enlaza una acción a un elemento táctil de forma fiable.
- *  En móvil el 'click' sintético NO siempre se emite (el navegador lo descarta
- *  si el gesto es ambiguo: scroll, doble-tap-zoom, gesto capturado por un padre).
- *  Por eso se escuchan pointerup/touchend —que siempre llegan— y se deduplica
- *  contra el click para no ejecutar dos veces la acción. */
-function bindTap(el, fn){
-  if(!el) return;
-  let last = 0;
-  function fire(e){
-    const now = Date.now();
-    if(now - last < 400) return;
-    last = now;
-    fn(e);
-  }
-  el.addEventListener('touchend', fire, { passive:true });
-  el.addEventListener('pointerup', function(e){
-    if(e.pointerType === 'mouse') return;   // con ratón manda el click
-    fire(e);
-  });
-  el.addEventListener('click', fire);
-}
 
 /* ============ OPTIMIZACIÓN MÓVIL: BIOS ============
    El POST del boot reescribe el innerHTML completo de #bios en cada paso del
@@ -516,19 +489,51 @@ const popData=[['⚠️ VIRUS DETECTED','rickroll.exe in your heart. Play it?','
  ['🚨 FEDERAL ALERT','Your PC was adopted by the ARC Network.','🌐'],['⚠️ SUBSCRIPTION','Your license is crying. Renew on piper.meme ',''],
  ['☣️ ERROR 666','Out of clean memes.','💀']];
 let popCount=0;
-let popupGraceUntil = 0; // post-antivirus "clean system" grace period
+let popupGraceUntil = 0;      // paz tras el antivirus ("PC limpio")
+let popupSnoozeUntil = 0;     // silencio tras cerrar un popup a mano
+let nextPopupAt = 0;          // instante del próximo popup permitido
+
+/* ===== MOTOR DE VIRUS — MODO TRANQUILO =====
+   Antes: ~70% de probabilidad cada 2.2 s, hasta 5 ventanas a la vez y ráfagas,
+   y cada Accept/Ignore/✕ lanzaba OTRO popup inmediatamente encadenándose sin
+   fin. Era agotador (y en móvil tapaba el escritorio entero).
+   Ahora: uno cada 45-90 s, máximo 2 en pantalla, sin cadenas al cerrar y 90 s
+   de silencio cuando el usuario cierra uno. */
+const POPUP_MIN_GAP_MS = 45000;   // separación mínima entre ventanas
+const POPUP_MAX_GAP_MS = 90000;   // separación máxima
+const POPUP_MAX_ON_SCREEN = 2;    // nunca más de 2 a la vez
+const POPUP_SNOOZE_MS = 90000;    // silencio después de que el usuario cierre una
+
+function scheduleNextPopup(from){
+  nextPopupAt = from + POPUP_MIN_GAP_MS + Math.random() * (POPUP_MAX_GAP_MS - POPUP_MIN_GAP_MS);
+  return nextPopupAt;
+}
+scheduleNextPopup(Date.now());
+
+/** El usuario interactuó con un popup: se calla un rato en vez de encadenar otro. */
+function snoozePopups(){
+  popupSnoozeUntil = Date.now() + POPUP_SNOOZE_MS;
+  scheduleNextPopup(popupSnoozeUntil);
+}
+
 function popupsSuppressed(){
-  if(Date.now() < popupGraceUntil) return true; // PC is clean... for now
+  const now = Date.now();
+  if(now < popupGraceUntil) return true;   // PC limpio tras el antivirus
+  if(now < popupSnoozeUntil) return true;  // el usuario acaba de cerrar uno
+  if(now < nextPopupAt) return true;       // todavía no toca
   const b=document.getElementById('win-browser');
   const n=document.getElementById('navesGame');
-  return (b && b.style.display!=='none') || (n && n.classList.contains('show'));
+  const ad=document.getElementById('adOverlay');
+  return (b && b.style.display!=='none')
+      || (n && n.classList.contains('show'))
+      || (ad && ad.classList.contains('show'));
 }
 function spawnPopup(){ if(scanning)return; if(popupsSuppressed())return;
-  if(document.querySelectorAll('.popup').length>=5)return;
+  if(document.querySelectorAll('.popup').length>=POPUP_MAX_ON_SCREEN)return;
   const d=popData[Math.floor(Math.random()*popData.length)],el=document.createElement('div');
   el.className='popup'; el.style.zIndex=500+(popCount++%40);
   el.style.left=(60+Math.random()*(innerWidth-440))+'px'; el.style.top=(40+Math.random()*(innerHeight-340))+'px';
-  el.innerHTML='<div class="title-bar danger"><span>⚠️ VirusARC — Alert</span><div class="tb-btns"><button class="close" onclick="this.closest(\'.popup\').remove()">✕</button></div></div>'+
+  el.innerHTML='<div class="title-bar danger"><span>⚠️ VirusARC — Alert</span><div class="tb-btns"><button class="close" onclick="popClose(this)">✕</button></div></div>'+
    '<div class="pbody"><span class="pemoji">'+d[2]+'</span><div><b>'+d[0]+'</b><br>'+d[1]+'</div></div>'+
    '<div class="pbtns"><button class="btn98" onclick="popAccept(this)">Accept</button><button class="btn98" onclick="popIgnore(this)">Ignore</button></div>';
   document.getElementById('popLayer').appendChild(el);
@@ -537,14 +542,13 @@ function spawnPopup(){ if(scanning)return; if(popupsSuppressed())return;
     function mv(ev){ el.style.left=(ev.clientX-ox)+'px'; el.style.top=(ev.clientY-oy)+'px'; }
     function up(){ removeEventListener('mousemove',mv); removeEventListener('mouseup',up); }
     addEventListener('mousemove',mv); addEventListener('mouseup',up); }); }
-function popAccept(b){ b.closest('.popup').remove(); if(Math.random()>.5){spawnPopup();spawnPopup();} }
-function popIgnore(b){ b.closest('.popup').remove(); spawnPopup(); }
+/* Cerrar siempre calla un rato: nunca se encadena una ventana nueva */
+function popClose(b){ const p=b.closest('.popup'); if(p) p.remove(); snoozePopups(); }
+function popAccept(b){ const p=b.closest('.popup'); if(p) p.remove(); snoozePopups(); spawnToast('🛡️ Has aceptado... el ARC Network te lo agradece 😈'); }
+function popIgnore(b){ const p=b.closest('.popup'); if(p) p.remove(); snoozePopups(); }
 setInterval(function(){
-  if(Math.random()>.30){ // ~70% cada 2.2s — la máquina está realmente infectada
-    spawnPopup();
-    if(Math.random()>.6) setTimeout(spawnPopup, 600); // ráfagas
-  }
-},2200);
+  if(!popupsSuppressed()) spawnPopup();
+}, 5000);
 // Ambient simulated network notifications (keeps the OS feeling alive, never spammy)
 const AMBIENT_MSGS=['🌐 ARC Network: 1,000,000+ nodes online','📦 New block synced — height #6,660,042','🛰️ Node handshake OK (12ms)',
   '🔒 Encrypted channel to piper.meme renewed','🧠 ARC AI: model refresh complete','💾 Auto-save: meme cache defragmented'];
@@ -2008,16 +2012,27 @@ function playerHit(){
       document.getElementById('nvFinalScore').textContent='SCORE: '+NV.score;
       document.getElementById('nvFinalRound').textContent='ROUND: '+NV.round;
       document.getElementById('nvBest').textContent='RECORD: '+Math.max(NV.best, topRecord);
-      const lastPilot = localStorage.getItem('arc_last_pilot')||'';
-      document.getElementById('nvPilotName').value=NV.pilotName||lastPilot;
-      document.getElementById('lbSaveMsg').textContent='';
-      document.getElementById('nvHUD').classList.remove('show');
+      prefillGameOverForm();
       nvShow('nvOver');
-      setTimeout(function(){ document.getElementById('nvPilotName').focus(); },100);
+      setTimeout(function(){
+        const n=document.getElementById('nvPilotName');
+        if(n) n.focus();
+      },100);
       explosionSfx(1.6);
     },1500);
   }
 }
+/* Impactos asteroide↔enemigo: se limita el sonido para no saturar el audio
+   cuando varios asteroides chocan a la vez. */
+let astHitSfxT = 0;
+function astHitFeedback(x, y){
+  const now = Date.now();
+  if(now - astHitSfxT > 90){ astHitSfxT = now; hitSfx(); }
+  NV.shake = Math.max(NV.shake, 5);
+  sparks(x, y, 8, '#fbbf24');
+  nvBoom(x, y, .8, 'volatile');
+}
+
 function killEnemy(e,idx,givePow){
   let boomScale = 1.0, boomType = 'normal', pts = 100, deb = 2;
   if(e.type==='cruiser'){ boomScale=1.8; boomType='volatile'; pts=350; deb=4; }
@@ -2158,11 +2173,34 @@ function useBomb(){
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const _SEC_SALT = 'ARC_VIRUS_v5_SALT_9973';
 
-/** Firma FNV v2 del record (name|score|round|date|ts|nonce|salt). Barrera anti-tamper; no es criptografía real porque la sal vive en el cliente. */
+/** Normaliza el nombre EXACTAMENTE igual que el servidor (PHP y Node), porque
+ *  el nombre entra en la firma: si el cliente manda minúsculas y el servidor
+ *  las pasa a mayúsculas, la firma no coincidiría y el record se rechazaría. */
+function cleanPilotName(n){
+  const s = String(n == null ? '' : n).toUpperCase().replace(/[^A-Z0-9 _-]/g, '').trim().slice(0, 10);
+  return s || 'PILOT';
+}
+
+/** Valida la wallet del piloto: 0x + 40 hex (EVM) o un ENS tipo nombre.eth. */
+function cleanWallet(w){
+  const s = String(w == null ? '' : w).trim();
+  if(/^0x[0-9a-fA-F]{40}$/.test(s)) return s.toLowerCase();
+  if(/^[a-z0-9][a-z0-9-]{1,61}\.eth$/i.test(s)) return s.toLowerCase();
+  return '';
+}
+/** Formato corto para tablas: 0x1234…ABCD */
+function shortWallet(w){
+  const s = cleanWallet(w);
+  if(!s) return '—';
+  if(s.indexOf('.eth') > 0) return s;
+  return s.slice(0,6) + '…' + s.slice(-4);
+}
+
+/** Firma FNV v3 del record (name|score|round|date|ts|nonce|wallet|salt).
+ *  Barrera anti-tamper; no es criptografía real porque la sal vive en el cliente. */
 function computeRecordSig(entry){
-  // v2 signature: timestamp + nonce are part of the hash (anti-replay)
   const str = (entry.name||'') + '|' + (entry.score||0) + '|' + (entry.round||0) + '|' + (entry.date||'') +
-              '|' + (entry._ts||0) + '|' + (entry._n||'') + '|' + _SEC_SALT;
+              '|' + (entry._ts||0) + '|' + (entry._n||'') + '|' + (cleanWallet(entry.wallet)) + '|' + _SEC_SALT;
   return fnv1a(str);
 }
 
@@ -2175,6 +2213,12 @@ function fnv1a(str){
   return (h >>> 0).toString(16);
 }
 
+function computeRecordSigV2(entry){
+  // Firma v2 (antes de la wallet): solo para verificar records antiguos
+  return fnv1a((entry.name||'') + '|' + (entry.score||0) + '|' + (entry.round||0) + '|' + (entry.date||'') +
+               '|' + (entry._ts||0) + '|' + (entry._n||'') + '|' + _SEC_SALT);
+}
+
 function computeRecordSigV1(entry){
   // Legacy signature (before timestamp+nonce)
   return fnv1a((entry.name||'') + '|' + (entry.score||0) + '|' + (entry.round||0) + '|' + (entry.date||'') + '|' + _SEC_SALT);
@@ -2182,8 +2226,10 @@ function computeRecordSigV1(entry){
 
 function verifyRecordIntegrity(entry){
   if(!entry || typeof entry.score !== 'number' || typeof entry.name !== 'string' || !entry._sig) return false;
-  // Accept both v2 (current) and legacy v1 signatures so old records survive the upgrade
-  return entry._sig === computeRecordSig(entry) || entry._sig === computeRecordSigV1(entry);
+  // Acepta v3 (actual), v2 y v1 para que los records anteriores sobrevivan
+  return entry._sig === computeRecordSig(entry)
+      || entry._sig === computeRecordSigV2(entry)
+      || entry._sig === computeRecordSigV1(entry);
 }
 
 function getWeeklyEpoch(){
@@ -2196,21 +2242,6 @@ function getWeeklyEpoch(){
   return epoch;
 }
 
-function getWeeklyData(){
-  getWeeklyEpoch();
-  try{
-    const d = localStorage.getItem('arc_weekly_leaderboard');
-    if(!d) return [];
-    const parsed = JSON.parse(d);
-    if(!Array.isArray(parsed)) return [];
-    const valid = parsed.filter(function(e){ return verifyRecordIntegrity(e); });
-    if(valid.length !== parsed.length){
-      saveWeeklyData(valid);
-    }
-    return valid;
-  }catch(e){ return []; }
-}
-
 // Bulletproof Deduplication: Guarantees strictly ONE record per pilot name, keeping only their highest score
 function deduplicateAndRank(list){
   if(!Array.isArray(list)) return [];
@@ -2219,20 +2250,27 @@ function deduplicateAndRank(list){
     const entry = list[i];
     if(!entry || typeof entry.score !== 'number') continue;
     const cleanName = (entry.name || 'PILOT').trim().toUpperCase().slice(0, 10) || 'PILOT';
-    const normalized = {
+    const wallet = cleanWallet(entry.wallet);
+    const norm = {
       name: cleanName,
       score: entry.score,
       round: entry.round || 1,
       date: entry.date || new Date().toLocaleDateString('en-US'),
-      _sig: entry._sig || computeRecordSig({ name: cleanName, score: entry.score, round: entry.round || 1, date: entry.date || '' })
+      wallet: wallet,
+      // Se conservan ts/nonce/firma originales: al recalcularlos se invalidaría
+      // la firma de los records que llegan del servidor.
+      _ts: entry._ts || 0,
+      _n: entry._n || '',
+      _sig: entry._sig || ''
     };
     if(!map.has(cleanName)){
-      map.set(cleanName, normalized);
+      map.set(cleanName, norm);
     } else {
-      const existing = map.get(cleanName);
-      if(normalized.score > existing.score || (normalized.score === existing.score && normalized.round > existing.round)){
-        map.set(cleanName, normalized);
-      }
+      const cur = map.get(cleanName);
+      const better = norm.score > cur.score
+        || (norm.score === cur.score && norm.round > cur.round)
+        || (norm.score === cur.score && norm.round === cur.round && !cur.wallet && norm.wallet);
+      if(better) map.set(cleanName, norm);
     }
   }
   const unique = Array.from(map.values());
@@ -2326,54 +2364,158 @@ function updateOrInsertRecord(list, newEntry){
   return deduplicateAndRank(cleanList);
 }
 
+/* ============ ENDPOINTS DEL LEADERBOARD (multi-host) ============
+   El proyecto puede desplegarse en hosts PHP (Hostinger) o Node (Vercel).
+   Antes solo se llamaba a api/records.php: en Vercel eso no ejecuta nada, el
+   fetch devolvía el código fuente y el catch vacío lo ocultaba, así que los
+   records nunca se guardaban. Ahora se prueban los endpoints en orden, se
+   recuerda el que funciona y los errores se muestran en pantalla. */
+let _recordsEndpoint = null;   // memoizado tras el primer acierto
+
+function recordEndpoints(){
+  return ['api/records.js', 'api/records.php']; // Node/serverless primero, PHP después
+}
+
+function recordsErrorMsg(res, data){
+  if(res.status === 422) return '❌ Wallet obligatoria: introduce una dirección 0x… válida o un nombre .eth.';
+  if(res.status === 429) return '⏳ Demasiado rápido: espera unos segundos antes de guardar otro record.';
+  if(res.status === 403) return '⛔ El servidor rechazó la firma del record. Recarga la página (Ctrl+F5) e inténtalo de nuevo.';
+  if(res.status === 500) return '⚠️ El servidor no pudo escribir el record: ' + ((data && data.storage && data.storage.note) || 'revisa los permisos de escritura de data/.');
+  if(res.status === 404) return '⚠️ No hay backend de records en este host (falta api/records.js o api/records.php).';
+  return '⚠️ No se pudo guardar el record (' + res.status + '): ' + ((data && data.error) || 'error del servidor') + '.';
+}
+
+/** Acepta la respuesta solo si es JSON real (en Vercel, records.php devuelve el
+ *  código fuente como texto y res.json() fallaría). */
+function recordsJson(res){
+  const ct = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
+  if(ct.indexOf('application/json') < 0) throw new Error('respuesta no-JSON');
+  return res.json();
+}
+
+async function recordsFetch(path, options){
+  const res = await fetch(path, options);
+  let data = null;
+  try { data = await recordsJson(res); }
+  catch(e){
+    // No es JSON (p.ej. código PHP en crudo): equivalente a "no hay backend aquí"
+    const err = new Error('non-json');
+    err.status = res.status;
+    err.data = null;
+    throw err;
+  }
+  if(!res.ok){
+    const err = new Error((data && data.error) || ('HTTP ' + res.status));
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+async function recordsRequest(method, entry){
+  const options = method === 'POST'
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry: entry }) }
+    : { method: 'GET' };
+  const order = _recordsEndpoint
+    ? [_recordsEndpoint].concat(recordEndpoints().filter(function(p){ return p !== _recordsEndpoint; }))
+    : recordEndpoints();
+  let lastErr = null;
+  for(let i = 0; i < order.length; i++){
+    const path = order[i];
+    try {
+      const data = await recordsFetch(path, options);
+      _recordsEndpoint = path;
+      return data;
+    } catch(e){
+      lastErr = e;
+      // 4xx "de negocio" (firma, rate limit, wallet): el endpoint SÍ existe,
+      // no tiene sentido probar el siguiente.
+      if(e.status && e.status !== 404 && e.status !== 405 && e.status !== 501) throw e;
+    }
+  }
+  const err = lastErr || new Error('sin endpoints');
+  if(!err.status) err.status = 404;
+  throw err;
+}
+
 function syncPostRecord(entry){
-  try {
-    fetch('api/records.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entry: entry })
-    }).then(function(res){
-      if(!res.ok) throw new Error();
-      return res.json();
-    }).then(function(data){
-      if(data && Array.isArray(data.allTime)) saveAllTimeData(data.allTime);
-      if(data && Array.isArray(data.weekly)) saveWeeklyData(data.weekly);
-      renderLeaderboard(entry.name);
-    }).catch(function(){
-      // Offline fallback: records already stored in localStorage
-    });
-  } catch(e){}
+  return recordsRequest('POST', entry).then(function(data){
+    const all = (data && Array.isArray(data.allTime)) ? data.allTime : null;
+    const wk  = (data && Array.isArray(data.weekly)) ? data.weekly : null;
+    if(all && all.length) saveAllTimeData(all);
+    if(wk && wk.length) saveWeeklyData(wk);
+    if(typeof renderLeaderboard === 'function') renderLeaderboard(entry.name);
+    return data;
+  });
 }
 
 function syncGetRecords(){
-  try {
-    fetch('api/records.php', { method: 'GET' })
-      .then(function(res){ if(!res.ok) throw new Error(); return res.json(); })
-      .then(function(data){
-        if(data && Array.isArray(data.allTime)){
-          let mergedAll = getAllTimeData();
-          data.allTime.forEach(function(e){ mergedAll = updateOrInsertRecord(mergedAll, e); });
-          saveAllTimeData(mergedAll);
-        }
-        if(data && Array.isArray(data.weekly)){
-          let mergedWk = getWeeklyData();
-          data.weekly.forEach(function(e){ mergedWk = updateOrInsertRecord(mergedWk, e); });
-          saveWeeklyData(mergedWk);
-        }
-        renderLeaderboard();
-      }).catch(function(){});
-  } catch(e){}
+  return recordsRequest('GET').then(function(data){
+    if(data && Array.isArray(data.allTime)){
+      let mergedAll = getAllTimeData();
+      data.allTime.forEach(function(e){ mergedAll = updateOrInsertRecord(mergedAll, e); });
+      saveAllTimeData(mergedAll);
+    }
+    if(data && Array.isArray(data.weekly)){
+      let mergedWk = getWeeklyData();
+      data.weekly.forEach(function(e){ mergedWk = updateOrInsertRecord(mergedWk, e); });
+      saveWeeklyData(mergedWk);
+    }
+    renderLeaderboard();
+    if(data && data.storage && data.storage.persistent === false){
+      console.warn('[ARC] Leaderboard en almacenamiento NO persistente:', data.storage.note);
+    }
+    return data;
+  }).catch(function(){
+    // Sin backend accesible: se sigue jugando con el ranking local
+    return null;
+  });
+}
+
+let _savingRecord = false;
+/** Rellena el formulario de fin de partida con los últimos datos del piloto. */
+function prefillGameOverForm(){
+  const nameEl = document.getElementById('nvPilotName');
+  const walletEl = document.getElementById('nvPilotWallet');
+  const msgEl = document.getElementById('lbSaveMsg');
+  if(nameEl) nameEl.value = NV.pilotName || localStorage.getItem('arc_last_pilot') || '';
+  if(walletEl){
+    walletEl.value = localStorage.getItem('arc_last_wallet') || '';
+    walletEl.classList.remove('err');
+  }
+  if(msgEl) msgEl.textContent = '';
+  const hud = document.getElementById('nvHUD');
+  if(hud) hud.classList.remove('show');
 }
 
 function saveLeaderboard(){
   const nameInput=document.getElementById('nvPilotName');
-  const name=(nameInput.value||'PILOT').trim().toUpperCase().slice(0,10)||'PILOT';
+  const walletInput=document.getElementById('nvPilotWallet');
+  const msgEl=document.getElementById('lbSaveMsg');
+  const name=cleanPilotName(nameInput.value);
+
+  // --- WALLET OBLIGATORIA: sin dirección válida no se guarda el record ---
+  const wallet = cleanWallet(walletInput ? walletInput.value : '');
+  if(!wallet){
+    if(msgEl) msgEl.textContent = '❌ La wallet es obligatoria: introduce una dirección válida (0x + 40 caracteres) o un nombre .eth.';
+    if(walletInput){
+      walletInput.classList.add('err');
+      try { walletInput.focus(); } catch(e){}
+      setTimeout(function(){ walletInput.classList.remove('err'); }, 2200);
+    }
+    return;
+  }
+  if(_savingRecord) return;
+  _savingRecord = true;
+
   NV.pilotName=name;
   localStorage.setItem('arc_last_pilot',name);
+  localStorage.setItem('arc_last_wallet',wallet);
 
   const prevTop1 = getAbsoluteRecordScore();
   const legitimateScore = Math.max(0, NV.score);
-  const entry={ name:name, score:legitimateScore, round:Math.max(1, NV.round), date:new Date().toLocaleDateString('en-US') };
+  const entry={ name:name, score:legitimateScore, round:Math.max(1, NV.round), date:new Date().toLocaleDateString('en-US'), wallet:wallet };
   entry._ts = Date.now();
   entry._n  = Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2);
   entry._sig = computeRecordSig(entry);
@@ -2387,10 +2529,22 @@ function saveLeaderboard(){
   const isNewAbsolute = prevTop1 > 0 ? (legitimateScore > prevTop1) : (legitimateScore > 0);
   saveAllTimeData(allTime);
 
-  // 3. Post to Server API if hosted on server
-  syncPostRecord(entry);
-
-  document.getElementById('lbSaveMsg').textContent='✅ Pilot record cryptographically signed & saved: '+name;
+  // 3. Enviar al backend (serverless Node o PHP): informa de éxito o del error real
+  if(msgEl) msgEl.textContent = '⏳ Firmando y enviando al servidor...';
+  syncPostRecord(entry).then(function(data){
+    _savingRecord = false;
+    let txt = '✅ Record firmado y guardado: ' + name;
+    if(data && data.storage && data.storage.persistent === false){
+      txt += ' ⚠️ (almacenamiento temporal del host: el ranking puede reiniciarse)';
+    }
+    if(msgEl) msgEl.textContent = txt;
+  }).catch(function(err){
+    _savingRecord = false;
+    const status = err && err.status ? err.status : 0;
+    const data = err && err.data ? err.data : null;
+    const local = '💾 Guardado en este dispositivo.';
+    if(msgEl) msgEl.textContent = recordsErrorMsg({ status: status }, data) + ' ' + local;
+  });
   setTimeout(function(){
     switchLbTab(isNewAbsolute ? 'alltime' : (NV.activeTab || 'weekly'));
     renderLeaderboard(name);
@@ -2408,14 +2562,14 @@ function renderLeaderboard(highlight){
     const msg = isWeekly
       ? 'No records this week yet. Be the first to set a score!'
       : 'No all-time records yet. Be the first legend in the Hall of Fame!';
-    body.innerHTML='<tr><td colspan="5" style="text-align:center; color:#9fd4ff; padding:20px;">'+msg+'</td></tr>';
+    body.innerHTML='<tr><td colspan="6" style="text-align:center; color:#9fd4ff; padding:20px;">'+msg+'</td></tr>';
     return;
   }
   const medals=['🥇','🥈','🥉'];
   lb.forEach(function(e,i){
     const tr=document.createElement('tr');
-    if(highlight && e.name===highlight && e.score===NV.score && e.round===NV.round) tr.className='new';
-    tr.innerHTML='<td>'+(medals[i]||(i+1))+'</td><td>'+e.name+'</td><td>'+e.score.toLocaleString()+'</td><td>'+e.round+'</td><td>'+e.date+'</td>';
+    if(highlight && e.name===highlight) tr.className='new';
+    tr.innerHTML='<td>'+(medals[i]||(i+1))+'</td><td>'+esc(e.name)+'</td><td class="lb-wallet" title="'+esc(e.wallet||'')+'">'+esc(shortWallet(e.wallet))+'</td><td>'+e.score.toLocaleString()+'</td><td>'+e.round+'</td><td>'+esc(e.date)+'</td>';
     body.appendChild(tr);
   });
 }
@@ -3163,10 +3317,10 @@ function renderLeaderboardPage(){
     html += '<p style="color:#64748b;">No records yet. Play Ships.exe and make history!</p>';
   } else {
     html += '<table style="width:100%;border-collapse:collapse;font-family:VT323,monospace;font-size:17px;">';
-    html += '<tr><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">#</th><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">Pilot</th><th style="color:#00d4ff;text-align:right;padding:6px 8px;border-bottom:2px solid #00d4ff;">Score</th><th style="color:#00d4ff;text-align:center;padding:6px 8px;border-bottom:2px solid #00d4ff;">Sector</th></tr>';
+    html += '<tr><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">#</th><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">Pilot</th><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">Wallet</th><th style="color:#00d4ff;text-align:right;padding:6px 8px;border-bottom:2px solid #00d4ff;">Score</th><th style="color:#00d4ff;text-align:center;padding:6px 8px;border-bottom:2px solid #00d4ff;">Sector</th></tr>';
     alltime.forEach(function(r, i){
       const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';  
-      html += '<tr style="border-bottom:1px solid rgba(0,212,255,0.12);"><td style="padding:5px 8px;color:#fbbf24;">'+(i+1)+medal+'</td><td style="padding:5px 8px;color:#e2e8f0;">'+r.name+'</td><td style="padding:5px 8px;text-align:right;color:#7cbb00;">'+r.score.toLocaleString()+'</td><td style="padding:5px 8px;text-align:center;color:#9fd4ff;">'+(r.round||'-')+'</td></tr>';
+      html += '<tr style="border-bottom:1px solid rgba(0,212,255,0.12);"><td style="padding:5px 8px;color:#fbbf24;">'+(i+1)+medal+'</td><td style="padding:5px 8px;color:#e2e8f0;">'+esc(r.name)+'</td><td style="padding:5px 8px;color:#9fd4ff;font-size:14px;" title="'+esc(r.wallet||'')+'">'+esc(shortWallet(r.wallet))+'</td><td style="padding:5px 8px;text-align:right;color:#7cbb00;">'+r.score.toLocaleString()+'</td><td style="padding:5px 8px;text-align:center;color:#9fd4ff;">'+(r.round||'-')+'</td></tr>';
     });
     html += '</table>';
   }
@@ -3175,9 +3329,9 @@ function renderLeaderboardPage(){
     html += '<p style="color:#64748b;">No weekly records yet.</p>';
   } else {
     html += '<table style="width:100%;border-collapse:collapse;font-family:VT323,monospace;font-size:17px;">';
-    html += '<tr><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">#</th><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">Pilot</th><th style="color:#00d4ff;text-align:right;padding:6px 8px;border-bottom:2px solid #00d4ff;">Score</th></tr>';
+    html += '<tr><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">#</th><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">Pilot</th><th style="color:#00d4ff;text-align:left;padding:6px 8px;border-bottom:2px solid #00d4ff;">Wallet</th><th style="color:#00d4ff;text-align:right;padding:6px 8px;border-bottom:2px solid #00d4ff;">Score</th></tr>';
     weekly.forEach(function(r, i){
-      html += '<tr style="border-bottom:1px solid rgba(0,212,255,0.12);"><td style="padding:5px 8px;color:#fbbf24;">'+(i+1)+'</td><td style="padding:5px 8px;color:#e2e8f0;">'+r.name+'</td><td style="padding:5px 8px;text-align:right;color:#7cbb00;">'+r.score.toLocaleString()+'</td></tr>';
+      html += '<tr style="border-bottom:1px solid rgba(0,212,255,0.12);"><td style="padding:5px 8px;color:#fbbf24;">'+(i+1)+'</td><td style="padding:5px 8px;color:#e2e8f0;">'+esc(r.name)+'</td><td style="padding:5px 8px;color:#9fd4ff;font-size:14px;" title="'+esc(r.wallet||'')+'">'+esc(shortWallet(r.wallet))+'</td><td style="padding:5px 8px;text-align:right;color:#7cbb00;">'+r.score.toLocaleString()+'</td></tr>';
     });
     html += '</table>';
   }
@@ -3492,47 +3646,100 @@ function filterArcCmd(q){
   });
 }
 
-/* ============ APERTURA DE ICONOS EN PANTALLA TÁCTIL ============
-   Antes esto escuchaba 'click', pero en navegadores móviles el tap NO siempre
-   emite click: en un dispositivo táctil se emiten pointerdown/pointerup y
-   touchstart/touchend, y si el navegador considera el gesto ambiguo (scroll,
-   doble-tap-zoom, gesto del padre) el click sintético nunca llega. Resultado:
-   en el celular se tocaba "Games"/"Ships.exe" y no abría nada.
-   Solución: responder a los eventos táctiles reales, con guardas para no
-   duplicar el disparo cuando el click sí se emite, y para no robarle el gesto
-   al arrastre de iconos en escritorio. */
-function initMobileTouchIcons(){
-  let lastOpen = 0;                 // anti doble disparo (touch + click)
-  function runIconAction(icon){
-    const dbl = icon.getAttribute('ondblclick');
-    if(!dbl) return;
-    const now = Date.now();
-    if(now - lastOpen < 450) return;
-    lastOpen = now;
-    runIconActionString(dbl);
-  }
+/* ============ TAP TÁCTIL → CLICK (sintetizador global) ============
+   Problema de fondo: en móvil el navegador NO siempre emite el 'click' sintético
+   después de un tap. Lo descarta cuando el gesto es ambiguo (scroll, doble-tap
+   zoom, gesto capturado por un padre). Toda la interfaz está cableada con
+   onclick/ondblclick (105 en el HTML + 27 generados), así que en el celular
+   fallaban los botones de las ventanas, el menú inicio y los del juego
+   (START MISSION, RANKINGS, BRIEFING, EXIT…).
+
+   En vez de enganchar manejadores elemento por elemento (frágil: cualquier
+   botón nuevo volvería a fallar), se sintetiza un 'click' real desde el tap.
+   Así funcionan TODOS los onclick/ondblclick existentes y los futuros, sin
+   tocar el código de cada botón.
+
+   Reglas:
+   - Solo actúa en interfaz táctil/estrecha; en escritorio no interviene.
+   - Si el dedo se desplaza > 10 px, era scroll: se ignora.
+   - Si el navegador canceló el gesto (está haciendo scroll), se ignora.
+   - Si un manejador anterior hizo preventDefault (joystick del juego, botones
+     de habilidad), su click ya está gestionado: no se duplica.
+   - Anti-duplicado de 400 ms por si el navegador SÍ emite el click nativo.
+   - No se sintetiza sobre campos de texto: un click sintético les quitaría el
+     foco y cerraría el teclado del móvil. */
+function initGlobalTapToClick(){
+  const MAX_DRIFT = 10;          // px de movimiento tolerados para considerarlo tap
+  const DEDUPE_MS = 400;
+  let lastSynthetic = 0;
+  let startX = 0, startY = 0, tracking = false;
+  let suppressUntil = 0;         // lo pone un manejador que ya hizo preventDefault
+
   function isTouchUI(){
-    return window.innerWidth <= 768 || isTouch || ('ontouchstart' in window && window.innerWidth <= 1024);
+    return isTouch || ('ontouchstart' in window) || window.innerWidth <= 768
+        || (navigator.maxTouchPoints > 0);
   }
-  // Delegación en fase de captura: aplica también a iconos creados después.
-  ['touchend','pointerup'].forEach(function(evName){
-    document.addEventListener(evName, function(e){
-      if(!isTouchUI()) return;
-      if(evName === 'pointerup' && e.pointerType === 'mouse') return; // el ratón usa click/dblclick nativos
-      const icon = e.target.closest && e.target.closest('.dicon');
-      if(!icon) return;
-      if(icon.dataset.dragged === '1'){ icon.dataset.dragged = '0'; return; } // fue un arrastre, no un tap
-      runIconAction(icon);
-    }, true);
-  });
-  // Respaldo para navegadores de escritorio con pantalla estrecha (click normal).
-  document.addEventListener('click', function(e){
-    if(!isTouchUI()) return;
-    const icon = e.target.closest && e.target.closest('.dicon');
-    if(!icon) return;
-    runIconAction(icon);
-  }, true);
+  function isTappable(el){
+    if(!el || !el.closest) return false;
+    if(el.closest('input, textarea, select, [contenteditable="true"]')) return false;
+    return !!el.closest('button, a, .dicon, .ctx-item, .nv-btn, .nv-glass, .nv-primary, ' +
+      '.meme-tile, .home-tile, .bm-btn, .space-btn, .lb-tab, .tb-win, .tbtn, .start-btn, ' +
+      '.sm-item, .arc-cmd-item, .synth-key-white, .synth-key-black, .sidebar-toggle, ' +
+      '[onclick], [ondblclick], [data-url]');
+  }
+  function synthesize(target, x, y){
+    const now = Date.now();
+    if(now - lastSynthetic < DEDUPE_MS) return;
+    lastSynthetic = now;
+    try {
+      target.dispatchEvent(new MouseEvent('click', {
+        bubbles: true, cancelable: true, composed: true,
+        clientX: x, clientY: y, button: 0, buttons: 0, view: window
+      }));
+    } catch(err){
+      // Navegadores antiguos sin constructor MouseEvent
+      const ev = document.createEvent('MouseEvents');
+      ev.initMouseEvent('click', true, true, window, 0, x, y, x, y, false, false, false, false, 0, null);
+      target.dispatchEvent(ev);
+    }
+  }
+
+  document.addEventListener('touchstart', function(e){
+    if(!isTouchUI() || !e.touches || e.touches.length !== 1){ tracking = false; return; }
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tracking = true;
+  }, { capture: true, passive: true });
+
+  document.addEventListener('touchend', function(e){
+    if(!tracking) return;
+    tracking = false;
+    // El propio navegador detectó scroll y canceló el gesto
+    if(e.cancelable === false) return;
+    // Otro manejador (joystick, habilidades del juego) ya gestionó este toque
+    if(Date.now() < suppressUntil) return;
+    const t = (e.changedTouches && e.changedTouches[0]) || null;
+    if(!t) return;
+    if(Math.abs(t.clientX - startX) > MAX_DRIFT || Math.abs(t.clientY - startY) > MAX_DRIFT) return;
+    const target = e.target;
+    if(!isTappable(target)) return;
+    synthesize(target, t.clientX, t.clientY);
+  }, { capture: true, passive: true });
+
+  // Los manejadores que hacen preventDefault marcan el gesto como gestionado.
+  document.addEventListener('touchstart', function(e){
+    if(e.defaultPrevented) suppressUntil = Date.now() + 600;
+  }, { capture: false, passive: true });
+  document.addEventListener('touchend', function(e){
+    if(e.defaultPrevented) suppressUntil = Date.now() + 600;
+  }, { capture: false, passive: true });
+
+  // Un click nativo reciente invalida la síntesis (evita el doble disparo)
+  document.addEventListener('click', function(){
+    lastSynthetic = Date.now();
+  }, { capture: true, passive: true });
 }
+initGlobalTapToClick();
 
 window.addEventListener('keydown', function(e){
   if((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')){
@@ -3548,45 +3755,6 @@ window.addEventListener('keydown', function(e){
 // Initialize browser
 renderTabs();
 renderHomePage();
-initMobileTouchIcons();
-
-/* ============ DOCK MÓVIL (lanzador siempre visible) ============
-   En el celular los iconos del escritorio pueden quedar fuera de la primera
-   pantalla y las ventanas ocupan todo el ancho, así que este dock replica los
-   accesos principales. Se construye a partir de los .dicon para que exista una
-   sola fuente de verdad: si mañana se añade un icono, se copia solo. */
-function buildMobileDock(){
-  const dock = document.getElementById('mobileDock');
-  if(!dock) return;
-  const picks = [
-    { key:'VirusARC', icon:'🛡️' },
-    { key:'Ships',    icon:'🚀', hot:true },
-    { key:'ARC Browser', icon:'🌐' },
-    { key:'Games',    icon:'🎮' },
-    { key:'Memes',    icon:'📁' },
-    { key:'README',   icon:'📄' }
-  ];
-  const icons = Array.from(document.querySelectorAll('.dicon'));
-  const labels = icons.map(function(d){ const l=d.querySelector('.lbl'); return l ? l.textContent.trim() : ''; });
-  dock.innerHTML = '';
-  picks.forEach(function(p){
-    const idx = labels.findIndex(function(l){ return l.indexOf(p.key) === 0; });
-    if(idx < 0) return;
-    const src = icons[idx];
-    const action = src.getAttribute('ondblclick');
-    if(!action) return;
-    const btn = document.createElement('button');
-    btn.className = 'mobile-dock-btn' + (p.hot ? ' hot' : '');
-    btn.type = 'button';
-    const lblEl = src.querySelector('.lbl');
-    btn.title = lblEl ? lblEl.textContent.trim() : p.key;
-    btn.setAttribute('aria-label', btn.title);
-    btn.textContent = p.icon;
-    bindTap(btn, function(){ runIconActionString(action); });
-    dock.appendChild(btn);
-  });
-}
-buildMobileDock();
 
 /* ============ CERRAR VENTANA DESLIZANDO HACIA ABAJO (táctil) ============
    En móvil las ventanas son hojas a pantalla completa y el botón ✕ queda lejos
@@ -4649,10 +4817,13 @@ function nvLoop(timestamp){
           const e = item;
           const idx = NV.enemies.indexOf(e);
           if(idx >= 0){
+            // El asteroide embiste al enemigo: muere, el asteroide pierde 1 HP y
+            // ambos sueltan explosión. La colisión también puntúa.
             killEnemy(e, idx, false);
             a.hp -= 1;
-            sparks(a.x, a.y, 4, '#fbbf24');
-            nvBoom(a.x, a.y, .5, 'rock');
+            a.flash = 5;
+            addScore(40);
+            astHitFeedback(a.x, a.y);
             if(a.hp <= 0){
               astDead = true;
               if(a.vol) detonateAsteroid(a, i);
