@@ -36,7 +36,7 @@ AUDIT.md              Informe de auditoría técnica del proyecto
 - El cliente **no depende del host**: prueba `api/records.js` y, si no existe, `api/records.php`, y muestra el error real si algo falla.
 - Abierto localmente (`file://`): sin red, el ranking funciona en localStorage.
 - Móvil: el viewport ya no usa `user-scalable=no` ni `maximum-scale` (barrera de accesibilidad); el pinch-zoom queda libre y el canvas se reajusta solo.
-- La detección de DevTools del "security shield" es **solo desktop** y está documentada como lore, no como seguridad real.
+- La detección de DevTools del "security shield" es **solo escritorio** y está documentada como lore, no como seguridad real. Usa la pausa del `debugger` (no el tamaño de ventana, que daba falsos positivos en móvil) y **en dispositivos táctiles ni se activa**. Se puede desactivar con `?lockdown=off` y forzar con `?lockdown=on`; si aparece, se cierra con el botón IGNORE o con Escape.
 
 ## Leaderboard (v3) — la wallet es obligatoria
 - Al terminar la partida el formulario pide **pilot name** y **your wallet**. Sin wallet válida no se guarda nada (el campo se marca en rojo y se explica el motivo).

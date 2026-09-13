@@ -5473,39 +5473,92 @@ function initSecurityShield(){
     }
   }, 400);
 
-  // 4. DevTools Detection and Security Lockout (SOLO DESKTOP)
-  // Antes se comparaba outer* - inner* contra un umbral fijo de 160 px para
-  // cualquier plataforma. En móviles y webviews (iOS Safari, Chrome Android,
-  // navegadores in-app) esa diferencia supera siempre el umbral porque la barra
-  // de URL y los controles del sistema no cuentan como viewport: la web creía
-  // que había DevTools abiertas y mostraba el banner "Developer inspection
-  // environment detected". Ahora la comprobación es desktop-only, ignora
-  // dispositivos táctiles y exige una proporción anómala, no un valor absoluto.
-  let devtoolsDetected = false;
-  function devtoolsCheckApplies(){
+  // 4. "Security Lockdown" anti-inspección (SOLO ESCRITORIO, y sin dimensiones)
+  //
+  // HISTORIAL DEL BUG: la detección comparaba outerWidth/outerHeight con
+  // innerWidth/innerHeight. Esa diferencia es el chrome del navegador, así que
+  // en móviles y webviews supera cualquier umbral SIEMPRE (barras de URL,
+  // barra de gestos, teclado) => el lockdown saltaba en el celular. El intento
+  // de blindarlo con "innerWidth < 900" y "pointer:coarse" tampoco era fiable:
+  // tablets, móviles grandes, ventanas estrechas y webviews con stylus/hover
+  // pasaban el filtro. Se ELIMINA la comprobación por dimensiones.
+  //
+  // Ahora:
+  //  - Solo se arma en escritorio real: sin táctil, puntero fino y con hover.
+  //    En móvil/tablet la comprobación NI SE PROGRAMA, así que es imposible que
+  //    aparezca allí.
+  //  - La señal es una pausa del `debugger` (si DevTools está abierto, la
+  //    ejecución se detiene y el tiempo medido se dispara). No depende del
+  //    tamaño de la ventana ni de la plataforma.
+  //  - Se puede desactivar siempre con ?lockdown=off y forzar con ?lockdown=on.
+  //  - Si llegara a aparecer, tiene botón IGNORE y se cierra con Escape.
+  let lockdownShown = false;
+  const lockdownParam = (function(){
+    try { return new URLSearchParams(location.search).get('lockdown') || ''; } catch(e){ return ''; }
+  })();
+  const lockdownOff = (lockdownParam === 'off' || lockdownParam === '0');
+  const lockdownForced = (lockdownParam === 'on' || lockdownParam === '1');
+
+  function lockdownAllowed(){
+    if(lockdownOff) return false;
+    if(lockdownForced) return true;
+    // Escritorio real: táctil fuera, y puntero fino + hover obligatorios
     if(isTouch || navigator.maxTouchPoints > 0) return false;
-    if(window.innerWidth < 900) return false;
-    if(!window.matchMedia) return true;
+    if(!window.matchMedia) return false;
     try{
-      if(window.matchMedia('(pointer: coarse)').matches) return false;
+      if(!window.matchMedia('(pointer: fine)').matches) return false;
       if(window.matchMedia('(hover: none)').matches) return false;
-    }catch(e){}
+      if(window.matchMedia('(any-pointer: coarse)').matches) return false;
+    }catch(e){ return false; }
     return true;
   }
-  setInterval(function(){
-    if(devtoolsDetected || !devtoolsCheckApplies()) return;
-    const wDiff = window.outerWidth - window.innerWidth;
-    const hDiff = window.outerHeight - window.innerHeight;
-    const misconfigured = (wDiff > 160 && wDiff / window.innerWidth > 0.25) ||
-                          (hDiff > 260 && hDiff / window.innerHeight > 0.30);
-    if(misconfigured){
-      devtoolsDetected = true;
-      const lockout = document.createElement('div');
-      lockout.id = 'secLockout';
-      lockout.style.cssText = 'position:fixed;inset:0;background:rgba(10,0,0,0.96);color:#ff003c;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;text-align:center;padding:20px;';
-      lockout.innerHTML = '<div style="font-size:60px;margin-bottom:14px;filter:drop-shadow(0 0 20px #ff003c);">🛡️</div><h2 style="font-size:28px;letter-spacing:3px;margin-bottom:12px;color:#ff003c;text-shadow:0 0 10px #ff003c;">VIRUSARC SECURITY LOCKDOWN</h2><p style="font-size:15px;color:#cfe8ff;max-width:540px;line-height:1.6;">Developer inspection environment detected. Client memory manipulation, console modifications, and script injections are cryptographically blocked.</p><button onclick="location.reload()" style="margin-top:24px;padding:12px 28px;background:linear-gradient(180deg,#ff003c,#b91c1c);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;font-size:15px;box-shadow:0 0 20px rgba(255,0,60,.5);">RELOAD SYSTEM</button>';
-      document.body.appendChild(lockout);
-    }
-  }, 1000);
+
+  function removeLockout(){
+    const el = document.getElementById('secLockout');
+    if(el) el.remove();
+  }
+
+  function showLockout(){
+    if(document.getElementById('secLockout')) return;
+    const lockout = document.createElement('div');
+    lockout.id = 'secLockout';
+    lockout.style.cssText = 'position:fixed;inset:0;background:rgba(10,0,0,0.96);color:#ff003c;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;text-align:center;padding:20px;';
+    lockout.innerHTML = '<div style="font-size:60px;margin-bottom:14px;filter:drop-shadow(0 0 20px #ff003c);">🛡️</div><h2 style="font-size:28px;letter-spacing:3px;margin-bottom:12px;color:#ff003c;text-shadow:0 0 10px #ff003c;">VIRUSARC SECURITY LOCKDOWN</h2><p style="font-size:15px;color:#cfe8ff;max-width:540px;line-height:1.6;">Developer inspection environment detected. Client memory manipulation, console modifications, and script injections are cryptographically blocked.</p><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:24px;"><button id="secLockoutIgnore" style="padding:12px 28px;background:transparent;color:#cfe8ff;border:1px solid #cfe8ff;border-radius:6px;cursor:pointer;font-weight:bold;font-size:15px;">IGNORE (ESC)</button><button onclick="location.reload()" style="padding:12px 28px;background:linear-gradient(180deg,#ff003c,#b91c1c);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;font-size:15px;box-shadow:0 0 20px rgba(255,0,60,.5);">RELOAD SYSTEM</button></div>';
+    document.body.appendChild(lockout);
+    const ign = document.getElementById('secLockoutIgnore');
+    if(ign) ign.addEventListener('click', removeLockout);
+  }
+
+  function devtoolsLikelyOpen(){
+    // Señal por pausa del debugger: si DevTools está abierto, la ejecución se
+    // detiene aquí y el tiempo medido se dispara. Se exige un umbral amplio para
+    // no confundirlo con un frame lento.
+    const t0 = performance.now();
+    // eslint-disable-next-line no-debugger
+    debugger;
+    return (performance.now() - t0) > 250;
+  }
+
+  // Red de seguridad: si por caché quedara un lockout de una versión anterior, fuera.
+  removeLockout();
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') removeLockout();
+  });
+
+  if(lockdownAllowed()){
+    // Enfriamiento: no se comprueba mientras el jugador está en partida (sería
+    // una pausa molesta justo en el peor momento) y se empieza a vigilar pasado
+    // un margen, para no interrumpir a nadie que esté trasteando la consola.
+    let armado = false;
+    setTimeout(function(){ armado = true; }, 10000);
+    setInterval(function(){
+      if(lockdownShown || !armado) return;
+      if(typeof NV !== 'undefined' && NV.on) return;   // jugando: no molestar
+      if(devtoolsLikelyOpen()){
+        lockdownShown = true;
+        showLockout();
+      }
+    }, 2500);
+  }
 }
 initSecurityShield();
