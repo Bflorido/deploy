@@ -21,6 +21,7 @@ api/
 data/                 JSON vivos: leaderboard, forum, ratelimit (se autogeneran)
 assets/               Logos ARC/Piper, nave, items (tu astronauta: assets/astronaut.png)
 assets/enemies/       Sprites SVG de enemigos (cargados al atlas del juego)
+tools/dev/            Utilidades de desarrollo: servidor estático y pruebas por CDP
 AUDIT.md              Informe de auditoría técnica del proyecto
 ```
 
@@ -38,6 +39,14 @@ Sí, el juego es jugable en celular con controles táctiles propios (no depende 
 - **Disparo automático**: en táctil la flauta-láser dispara sola (no hay botón de fuego).
 - Aparecen al empezar la partida (`nextRound()` añade `.show` a `#touchJoy`/`#touchBtns`) y se ocultan en menús, pausa, briefing y leaderboard.
 - El juego detecta móvil por user-agent, `ontouchstart`, tamaño de ventana y orientación para ajustar dificultad, número de enemigos en pantalla y velocidad de oleada.
+
+## Experiencia móvil (escritorio ARCSYSTEMS en celular)
+- **Apertura de apps por toque**: los iconos se abren con `touchend`/`pointerup`, no con `click`. En móvil el `click` sintético no siempre se emite (el navegador lo descarta si el gesto es ambiguo), y por eso antes tocar "Games" o "Ships.exe" no hacía nada. Después de un tap breve el juego queda con la arena sucia y el cronómetro corriendo; por eso también hay un **dock lateral** (`#mobileDock`) con los accesos principales siempre visibles, rellenado desde los propios `.dicon` para no duplicar configuración.
+- **Ventanas como hojas**: a pantalla completa ancladas a la taskbar, con altura basada en `dvh` (se ajusta cuando el navegador oculta su barra de URL) y respeto de `safe-area-inset` en notch y barra de gestos.
+- **Cerrar deslizando**: arrastrar la barra de título hacia abajo cierra la app (además del botón ✕).
+- **Objetivos táctiles ≥ 40 px**: botones de ventana, taskbar y menú inicio.
+- **Rotación**: al girar el móvil el dock pasa a horizontal y los iconos se compactan; el canvas se reajusta con debounce (no reconstruye el grid espacial en cada píxel de scroll).
+- **Rendimiento**: el dock y el BIOS evitan trabajo innecesario; el POST intercepta `innerHTML` para volcar al DOM una vez por frame en lugar de ~75 reescrituras completas.
 
 ## APIs
 ### `api/records.php` — Leaderboard Endurecido (v2)

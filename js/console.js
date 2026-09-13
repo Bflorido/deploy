@@ -8,6 +8,63 @@
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 /** JSON.parse tolerante a corrupción: devuelve fallback si falla. */
 function safeParse(raw, fallback){ try{ const v = JSON.parse(raw); return v === null ? fallback : v; } catch(e){ return fallback; } }
+/** Ejecuta una acción de icono definida como string (atributo ondblclick),
+ *  compartida por el escritorio y el dock móvil. */
+function runIconActionString(src){
+  try { new Function(src)(); } catch(err){ /* acción inválida: se ignora */ }
+}
+
+/** Enlaza una acción a un elemento táctil de forma fiable.
+ *  En móvil el 'click' sintético NO siempre se emite (el navegador lo descarta
+ *  si el gesto es ambiguo: scroll, doble-tap-zoom, gesto capturado por un padre).
+ *  Por eso se escuchan pointerup/touchend —que siempre llegan— y se deduplica
+ *  contra el click para no ejecutar dos veces la acción. */
+function bindTap(el, fn){
+  if(!el) return;
+  let last = 0;
+  function fire(e){
+    const now = Date.now();
+    if(now - last < 400) return;
+    last = now;
+    fn(e);
+  }
+  el.addEventListener('touchend', fire, { passive:true });
+  el.addEventListener('pointerup', function(e){
+    if(e.pointerType === 'mouse') return;   // con ratón manda el click
+    fire(e);
+  });
+  el.addEventListener('click', fire);
+}
+
+/* ============ OPTIMIZACIÓN MÓVIL: BIOS ============
+   El POST del boot reescribe el innerHTML completo de #bios en cada paso del
+   contador de memoria (~75 escrituras HTML completas). En un celular, con los
+   assets pesados cargando en paralelo, eso se nota. Se intercepta UNA sola vez
+   la propiedad innerHTML para: (1) saltar las escrituras cuando el boot ya
+   terminó y (2) escribir en un buffer y volcar al DOM una vez por frame. */
+(function patchBiosInnerHTML(){
+  const bios = document.getElementById('bios');
+  if(!bios) return;
+  const proto = Object.getPrototypeOf(bios);
+  const desc = Object.getOwnPropertyDescriptor(proto, 'innerHTML');
+  if(!desc || !desc.set) return;
+  let pending = null, raf = 0;
+  Object.defineProperty(bios, 'innerHTML', {
+    configurable: true,
+    get: function(){ return desc.get.call(this); },
+    set: function(v){
+      const boot = document.getElementById('boot');
+      if(boot && boot.style.display === 'none') return;   // el boot ya terminó: escritura inútil
+      pending = v;
+      if(raf) return;                                     // ya hay un volcado programado
+      raf = requestAnimationFrame(function(){
+        raf = 0;
+        const val = pending; pending = null;
+        if(val !== null) desc.set.call(bios, val);
+      });
+    }
+  });
+})();
 
 /* ============ AUDIO ============ */
 let soundOn=true, AC=null, masterComp=null;
@@ -387,6 +444,9 @@ function initDesktopIcons(){
         window.removeEventListener('mousemove', onMouseMove);
         window.removeEventListener('mouseup', onMouseUp);
         if(isDragging){
+          // Marca para que el manejador táctil no interprete el final del
+          // arrastre como un tap de apertura.
+          icon.dataset.dragged = '1';
           setTimeout(function(){ icon.classList.remove('dragging'); }, 50);
         }
       }
@@ -3432,18 +3492,46 @@ function filterArcCmd(q){
   });
 }
 
-// Touch Desktop Single-Tap Handler
+/* ============ APERTURA DE ICONOS EN PANTALLA TÁCTIL ============
+   Antes esto escuchaba 'click', pero en navegadores móviles el tap NO siempre
+   emite click: en un dispositivo táctil se emiten pointerdown/pointerup y
+   touchstart/touchend, y si el navegador considera el gesto ambiguo (scroll,
+   doble-tap-zoom, gesto del padre) el click sintético nunca llega. Resultado:
+   en el celular se tocaba "Games"/"Ships.exe" y no abría nada.
+   Solución: responder a los eventos táctiles reales, con guardas para no
+   duplicar el disparo cuando el click sí se emite, y para no robarle el gesto
+   al arrastre de iconos en escritorio. */
 function initMobileTouchIcons(){
-  document.querySelectorAll('.dicon').forEach(function(icon){
-    icon.addEventListener('click', function(e){
-      if(window.innerWidth <= 768 || ('ontouchstart' in window)){
-        const dbl = icon.getAttribute('ondblclick');
-        if(dbl){
-          try { new Function(dbl)(); } catch(err){}
-        }
-      }
-    });
+  let lastOpen = 0;                 // anti doble disparo (touch + click)
+  function runIconAction(icon){
+    const dbl = icon.getAttribute('ondblclick');
+    if(!dbl) return;
+    const now = Date.now();
+    if(now - lastOpen < 450) return;
+    lastOpen = now;
+    runIconActionString(dbl);
+  }
+  function isTouchUI(){
+    return window.innerWidth <= 768 || isTouch || ('ontouchstart' in window && window.innerWidth <= 1024);
+  }
+  // Delegación en fase de captura: aplica también a iconos creados después.
+  ['touchend','pointerup'].forEach(function(evName){
+    document.addEventListener(evName, function(e){
+      if(!isTouchUI()) return;
+      if(evName === 'pointerup' && e.pointerType === 'mouse') return; // el ratón usa click/dblclick nativos
+      const icon = e.target.closest && e.target.closest('.dicon');
+      if(!icon) return;
+      if(icon.dataset.dragged === '1'){ icon.dataset.dragged = '0'; return; } // fue un arrastre, no un tap
+      runIconAction(icon);
+    }, true);
   });
+  // Respaldo para navegadores de escritorio con pantalla estrecha (click normal).
+  document.addEventListener('click', function(e){
+    if(!isTouchUI()) return;
+    const icon = e.target.closest && e.target.closest('.dicon');
+    if(!icon) return;
+    runIconAction(icon);
+  }, true);
 }
 
 window.addEventListener('keydown', function(e){
@@ -3461,6 +3549,90 @@ window.addEventListener('keydown', function(e){
 renderTabs();
 renderHomePage();
 initMobileTouchIcons();
+
+/* ============ DOCK MÓVIL (lanzador siempre visible) ============
+   En el celular los iconos del escritorio pueden quedar fuera de la primera
+   pantalla y las ventanas ocupan todo el ancho, así que este dock replica los
+   accesos principales. Se construye a partir de los .dicon para que exista una
+   sola fuente de verdad: si mañana se añade un icono, se copia solo. */
+function buildMobileDock(){
+  const dock = document.getElementById('mobileDock');
+  if(!dock) return;
+  const picks = [
+    { key:'VirusARC', icon:'🛡️' },
+    { key:'Ships',    icon:'🚀', hot:true },
+    { key:'ARC Browser', icon:'🌐' },
+    { key:'Games',    icon:'🎮' },
+    { key:'Memes',    icon:'📁' },
+    { key:'README',   icon:'📄' }
+  ];
+  const icons = Array.from(document.querySelectorAll('.dicon'));
+  const labels = icons.map(function(d){ const l=d.querySelector('.lbl'); return l ? l.textContent.trim() : ''; });
+  dock.innerHTML = '';
+  picks.forEach(function(p){
+    const idx = labels.findIndex(function(l){ return l.indexOf(p.key) === 0; });
+    if(idx < 0) return;
+    const src = icons[idx];
+    const action = src.getAttribute('ondblclick');
+    if(!action) return;
+    const btn = document.createElement('button');
+    btn.className = 'mobile-dock-btn' + (p.hot ? ' hot' : '');
+    btn.type = 'button';
+    const lblEl = src.querySelector('.lbl');
+    btn.title = lblEl ? lblEl.textContent.trim() : p.key;
+    btn.setAttribute('aria-label', btn.title);
+    btn.textContent = p.icon;
+    bindTap(btn, function(){ runIconActionString(action); });
+    dock.appendChild(btn);
+  });
+}
+buildMobileDock();
+
+/* ============ CERRAR VENTANA DESLIZANDO HACIA ABAJO (táctil) ============
+   En móvil las ventanas son hojas a pantalla completa y el botón ✕ queda lejos
+   del pulgar: arrastrar la barra de título hacia abajo cierra la app. */
+(function initSwipeToClose(){
+  let sw = null;
+  document.addEventListener('touchstart', function(e){
+    if(!(window.innerWidth <= 768 || isTouch)) return;
+    const bar = e.target.closest && e.target.closest('.title-bar');
+    if(!bar || (e.target.closest && e.target.closest('button'))) return;
+    const win = bar.closest('.window');
+    if(!win) return;
+    sw = { win:win, y:e.touches[0].clientY, dy:0, active:false, t:Date.now() };
+  }, { passive:true });
+  document.addEventListener('touchmove', function(e){
+    if(!sw) return;
+    const dy = e.touches[0].clientY - sw.y;
+    if(!sw.active){
+      if(Math.abs(dy) < 14) return;   // deja pasar el scroll normal
+      sw.active = true;
+      sw.win.style.transition = 'none';
+    }
+    if(dy > 0){
+      sw.dy = dy;
+      sw.win.style.transform = 'translateY(' + dy + 'px)';
+    }
+  }, { passive:true });
+  document.addEventListener('touchend', function(){
+    if(!sw) return;
+    const s = sw; sw = null;
+    if(!s.active) return;
+    const fast = s.dy > 60 && (Date.now() - s.t) < 400;
+    s.win.style.transition = 'transform .18s ease-out';
+    if(s.dy > 110 || fast){
+      s.win.style.transform = 'translateY(105%)';
+      setTimeout(function(){
+        closeWindow(s.win.id);
+        s.win.style.transform = '';
+        s.win.style.transition = '';
+      }, 170);
+    } else {
+      s.win.style.transform = '';
+      setTimeout(function(){ s.win.style.transition = ''; }, 200);
+    }
+  }, { passive:true });
+})();
 
 /* ============ POWER-UPS & CRYPTO ABILITIES ============ */
 function powerUpColor(t){
@@ -5014,7 +5186,20 @@ function drawShip(x,y,ax,dashing){
   nvCtx.restore();
 }
 requestAnimationFrame(nvLoop);
-addEventListener('resize',function(){ if(NV.on)nvResize(); });
+/* Redimensionado adaptativo: en móvil el viewport cambia constantemente (barra
+   de URL al hacer scroll, rotación, teclado). nvResize() reconstruye el grid
+   espacial y el atlas de texturas, así que se debounce para no hacerlo en cada
+   píxel de scroll. */
+let nvResizeT = null;
+function nvScheduleResize(){
+  clearTimeout(nvResizeT);
+  nvResizeT = setTimeout(function(){ if(NV.on) nvResize(); }, 220);
+}
+addEventListener('resize', nvScheduleResize);
+addEventListener('orientationchange',function(){ setTimeout(nvScheduleResize, 260); });
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', nvScheduleResize);
+}
 addEventListener('keydown',function(e){
   if(!NV.on)return;
   if(NV.state==='intro'){ endNvIntro(); return; }
