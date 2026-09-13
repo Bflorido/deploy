@@ -63,6 +63,40 @@ function check(label, cond, extra) {
   check('no existe el dock en el DOM', (await ev("!!document.getElementById('mobileDock')")) === false);
   check('existe el sintetizador global', (await ev("typeof initGlobalTapToClick")) === 'function');
 
+  console.log('=== 0b. Caso Android: click nativo + tap no debe duplicar ===');
+  // Android Chrome SÍ emite click nativo. El bug era que ese click bloqueaba la
+  // síntesis y el botón no hacía nada. Aquí se simula ese orden.
+  const dup = await ev(`(function(){
+    const w = document.getElementById('win-games');
+    if(w.classList.contains('open')) closeWindow('win-games');
+    let n = 0;
+    const btn = document.querySelector('.dicon[ondblclick*="win-games"]');
+    const orig = window.openWindow;
+    window.openWindow = function(id){ n++; return orig.apply(this, arguments); };
+    const r = btn.getBoundingClientRect();
+    // 1) click nativo (como haría Android)  2) luego el tap
+    btn.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true}));
+    const despuesClickNativo = n;
+    window.__tapTarget = [Math.round(r.left+r.width/2), Math.round(r.top+r.height/2)];
+    window.__openWindowCount = function(){ return n; };
+    return { trasClickNativo: despuesClickNativo, abierta: w.classList.contains('open') };
+  })()`);
+  check('el click nativo por sí solo no abre (necesita el tap)', dup.trasClickNativo === 0, dup);
+  const tapTarget = await ev("window.__tapTarget");
+  if (tapTarget) {
+    await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: tapTarget[0], y: tapTarget[1], id: 1 }] });
+    await sleep(70);
+    await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(700);
+  }
+  const dupRes = await ev(`(function(){
+    const w = document.getElementById('win-games');
+    return { veces: window.__openWindowCount(), abierta: w.classList.contains('open') };
+  })()`);
+  check('el tap abre la ventana exactamente UNA vez', dupRes.veces === 1, dupRes);
+  check('la ventana quedó abierta', dupRes.abierta === true, dupRes);
+  await ev("window.openWindow = window.openWindow; closeWindow('win-games'); 'reset'");
+
   console.log('=== 1. Icono del escritorio -> abre ventana ===');
   await tapSelector('.dicon[ondblclick*="win-games"]');
   check('1 tap en "Games" abre su ventana', (await ev("document.getElementById('win-games').classList.contains('open')")) === true);

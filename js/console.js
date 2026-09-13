@@ -3646,32 +3646,37 @@ function filterArcCmd(q){
   });
 }
 
-/* ============ TAP TÁCTIL → CLICK (sintetizador global) ============
-   Problema de fondo: en móvil el navegador NO siempre emite el 'click' sintético
-   después de un tap. Lo descarta cuando el gesto es ambiguo (scroll, doble-tap
-   zoom, gesto capturado por un padre). Toda la interfaz está cableada con
+/* ============ TAP TÁCTIL → CLICK (sintetizador global, 2 vías) ============
+   Problema de fondo: en móvil el navegador NO siempre emite el 'click' después
+   de un tap. Lo descarta cuando el gesto es ambiguo (scroll, doble-tap zoom,
+   gesto capturado por un padre). Toda la interfaz está cableada con
    onclick/ondblclick (105 en el HTML + 27 generados), así que en el celular
    fallaban los botones de las ventanas, el menú inicio y los del juego
    (START MISSION, RANKINGS, BRIEFING, EXIT…).
 
-   En vez de enganchar manejadores elemento por elemento (frágil: cualquier
-   botón nuevo volvería a fallar), se sintetiza un 'click' real desde el tap.
-   Así funcionan TODOS los onclick/ondblclick existentes y los futuros, sin
-   tocar el código de cada botón.
+   VÍA 1 — síntesis: se lanza un click real desde el tap, para que funcionen
+   TODOS los manejadores (incluidos los addEventListener registrados).
+
+   VÍA 2 — respaldo: si tras sintetizar el click NADIE lo ha gestionado (el
+   navegador no lo entregó, o el texto del atributo no compiló como handler),
+   se ejecuta directamente el código del propio atributo onclick/ondblclick. Es
+   la garantía dura: no depende de que el navegador procese un evento sintético.
 
    Reglas:
    - Solo actúa en interfaz táctil/estrecha; en escritorio no interviene.
    - Si el dedo se desplaza > 10 px, era scroll: se ignora.
    - Si el navegador canceló el gesto (está haciendo scroll), se ignora.
-   - Si un manejador anterior hizo preventDefault (joystick del juego, botones
-     de habilidad), su click ya está gestionado: no se duplica.
-   - Anti-duplicado de 400 ms por si el navegador SÍ emite el click nativo.
-   - No se sintetiza sobre campos de texto: un click sintético les quitaría el
-     foco y cerraría el teclado del móvil. */
+   - Si otro manejador hizo preventDefault (joystick y habilidades del juego),
+     su click ya está gestionado: no se duplica.
+   - Anti-duplicado por gesto y en el tiempo, para no abrir dos veces.
+   - No seactúa sobre campos de texto: un click sintético les quitaría el foco
+     y cerraría el teclado del móvil. */
 function initGlobalTapToClick(){
   const MAX_DRIFT = 10;          // px de movimiento tolerados para considerarlo tap
-  const DEDUPE_MS = 400;
-  let lastSynthetic = 0;
+  const DEDUPE_MS = 350;         // ventana anti-repetición (gestos distintos)
+  let lastTapHandled = 0;
+  let syntheticInFlight = false; // evita que mi propio click bloquee la síntesis
+  let clickSeenAt = 0;           // cuándo se vio un click nativo por última vez
   let startX = 0, startY = 0, tracking = false;
   let suppressUntil = 0;         // lo pone un manejador que ya hizo preventDefault
 
@@ -3687,20 +3692,65 @@ function initGlobalTapToClick(){
       '.sm-item, .arc-cmd-item, .synth-key-white, .synth-key-black, .sidebar-toggle, ' +
       '[onclick], [ondblclick], [data-url]');
   }
-  function synthesize(target, x, y){
-    const now = Date.now();
-    if(now - lastSynthetic < DEDUPE_MS) return;
-    lastSynthetic = now;
+
+  /** Dispara un click sintético sobre el elemento (y sobre sus ancestros
+   *  pulsables, por si el manejador está en el contenedor). */
+  function fireSynthetic(el, x, y){
+    syntheticInFlight = true;
     try {
-      target.dispatchEvent(new MouseEvent('click', {
-        bubbles: true, cancelable: true, composed: true,
-        clientX: x, clientY: y, button: 0, buttons: 0, view: window
-      }));
-    } catch(err){
-      // Navegadores antiguos sin constructor MouseEvent
-      const ev = document.createEvent('MouseEvents');
-      ev.initMouseEvent('click', true, true, window, 0, x, y, x, y, false, false, false, false, 0, null);
-      target.dispatchEvent(ev);
+      try {
+        el.dispatchEvent(new MouseEvent('click', {
+          bubbles: true, cancelable: true, composed: true,
+          clientX: x, clientY: y, button: 0, buttons: 0, view: window
+        }));
+      } catch(err){
+        const ev = document.createEvent('MouseEvents');
+        ev.initMouseEvent('click', true, true, window, 0, x, y, x, y, false, false, false, false, 0, null);
+        el.dispatchEvent(ev);
+      }
+    } finally {
+      syntheticInFlight = false;
+    }
+  }
+
+  /** VÍA 2: último recurso. Ejecuta el handler del propio botón si nadie lo hizo. */
+  function runAttrFallback(el){
+    const node = el.closest('[onclick], [ondblclick], [data-url]');
+    if(!node) return false;
+    // 1) Handlers asignados por propiedad (los crea JS: `btn.onclick = fn`).
+    //    Si el diseño de la página los bloqueó, el atributo de texto no existirá
+    //    y esta es la única forma de recuperarlos.
+    const direct = node.onclick || node.ondblclick;
+    if(typeof direct === 'function'){
+      try { direct.call(node, { target: node, type: 'click' }); return true; } catch(err){}
+    }
+    // 2) Handlers de atributo en texto (los inline del HTML).
+    const attr = node.getAttribute('ondblclick') || node.getAttribute('onclick');
+    if(attr){
+      try { new Function('event', attr).call(node, { target: node, type: 'click' }); return true; }
+      catch(err){ /* atributo no compilable: se ignora */ }
+    }
+    // 3) Elementos que navegan mediante data-url (fichas del ARC Browser).
+    const url = node.getAttribute('data-url');
+    if(url){
+      try { loadUrl(url, true); return true; } catch(err){}
+    }
+    return false;
+  }
+
+  function handleTap(target, x, y){
+    const now = Date.now();
+    if(now - lastTapHandled < DEDUPE_MS) return;   // dos dedos / doble tap
+    lastTapHandled = now;
+
+    // Si el navegador acaba de emitir un click nativo, ese ya hizo el trabajo.
+    if(now - clickSeenAt < DEDUPE_MS) return;
+
+    fireSynthetic(target, x, y);
+
+    // ¿Lo ha gestionado alguien? Si no, ejecutamos el handler a mano.
+    if(clickSeenAt < now){
+      runAttrFallback(target);
     }
   }
 
@@ -3716,6 +3766,9 @@ function initGlobalTapToClick(){
     tracking = false;
     // El propio navegador detectó scroll y canceló el gesto
     if(e.cancelable === false) return;
+    // Ya venía cancelado (defensivo: cubre a los navegadores que fijan
+    // defaultPrevented antes de que corra este listener de captura)
+    if(e.defaultPrevented) return;
     // Otro manejador (joystick, habilidades del juego) ya gestionó este toque
     if(Date.now() < suppressUntil) return;
     const t = (e.changedTouches && e.changedTouches[0]) || null;
@@ -3723,7 +3776,7 @@ function initGlobalTapToClick(){
     if(Math.abs(t.clientX - startX) > MAX_DRIFT || Math.abs(t.clientY - startY) > MAX_DRIFT) return;
     const target = e.target;
     if(!isTappable(target)) return;
-    synthesize(target, t.clientX, t.clientY);
+    handleTap(target, t.clientX, t.clientY);
   }, { capture: true, passive: true });
 
   // Los manejadores que hacen preventDefault marcan el gesto como gestionado.
@@ -3734,9 +3787,12 @@ function initGlobalTapToClick(){
     if(e.defaultPrevented) suppressUntil = Date.now() + 600;
   }, { capture: false, passive: true });
 
-  // Un click nativo reciente invalida la síntesis (evita el doble disparo)
+  // Registro de clicks reales. CLAVE: el click que sintetizo yo NO debe contar
+  // como "el navegador ya lo hizo", porque entonces la vía 2 se desactivaría
+  // sola (era el bug que rompía Android, donde Chrome sí emite click nativo).
   document.addEventListener('click', function(){
-    lastSynthetic = Date.now();
+    if(syntheticInFlight) return;   // es mi propio click
+    clickSeenAt = Date.now();
   }, { capture: true, passive: true });
 }
 initGlobalTapToClick();
