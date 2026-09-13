@@ -9,6 +9,31 @@
      la detección de DevTools por dimensiones en initSecurityShield (js/console.js),
      ya corregida. El canvas se reajusta solo en nvResize/resize. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>
+/* ===== GUARDA ANTI-LOCKDOWN EN MÓVIL (se ejecuta ANTES que console.js) =====
+   El "SECURITY LOCKDOWN" (initSecurityShield en js/console.js) es lore de
+   escritorio. En iPhone aparecía por una detección de DevTools basada en el
+   tamaño de ventana, que en Safari iOS siempre da falso positivo.
+   Esta guarda se ejecuta en el <head>, antes que el resto del JS, y vigila el
+   DOM: si algún script (incluido un console.js ANTIGUO servido desde la caché de
+   Safari) inserta el overlay en un dispositivo táctil, lo elimina al instante.
+   Así el aviso no puede quedarse pegado aunque el JS esté cacheado. */
+(function(){
+  var touch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0);
+  var forced = false;
+  try { forced = /[?&]lockdown=(on|1)\b/.test(location.search); } catch(e){}
+  if(!touch || forced) return;
+  function kill(){
+    var el = document.getElementById('secLockout');
+    if(el && el.parentNode) el.parentNode.removeChild(el);
+  }
+  kill();
+  document.addEventListener('DOMContentLoaded', kill, false);
+  window.addEventListener('load', kill, false);
+  var obs = new MutationObserver(kill);
+  obs.observe(document.documentElement, { childList:true, subtree:true });
+})();
+</script>
 <title>ARCSYSTEMS XP — Professional</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/vt323@5.0.0/index.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.0/index.min.css">
